@@ -128,7 +128,7 @@ class UKF:
             for j in range(len(self.chi_a[0])):
                 Sj += self.wc[j] * np.outer(z_diff[:,j], z_diff[:,j])
                 sig_xz += self.wc[j] * np.outer(mu_diff[:,j] , z_diff[:,j])
-            Sj += self.Q
+#            Sj += self.Q
 
             Ki = sig_xz @ np.linalg.inv(Sj)
             innov = (z[:,i] - z_hat[:,i]).reshape(2,1)
