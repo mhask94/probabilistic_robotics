@@ -15,7 +15,7 @@ def wrap(angle):
 class Visualizer:
     def __init__(self, limits=[-10,10,-10,10], x0=np.zeros((3,1)),
             xhat0=np.zeros((3,1)), sigma0=np.eye(3), landmarks=np.empty(0),
-            live='True'):
+            live=True):
         self.time_hist = [0]
         plt.rcParams["figure.figsize"] = (9,7)
         self.fig, self.ax = plt.subplots()

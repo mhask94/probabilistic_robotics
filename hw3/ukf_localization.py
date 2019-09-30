@@ -6,7 +6,6 @@ from numpy.random import randn as randn
 import control as ctrl
 from visualizer import Visualizer
 from scipy.io import loadmat
-import pdb
 
 def wrap(angle):
     angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
@@ -186,7 +185,7 @@ if __name__ == "__main__":
     # plotting
     lims=[-10,10,-10,10]
     viz = Visualizer(limits=lims, x0=x0, xhat0=xhat0, sigma0=sigma,
-                     landmarks=landmarks, live='True')
+                     landmarks=landmarks, live=True)
     
     # run simulation
     for i,t in enumerate(time):
