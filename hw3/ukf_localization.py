@@ -6,6 +6,7 @@ from numpy.random import randn as randn
 import control as ctrl
 from visualizer import Visualizer
 from scipy.io import loadmat
+import pdb
 
 def wrap(angle):
     angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
@@ -22,10 +23,10 @@ class TurtleBot:
         self.landmarks = landmarks
     
     def propagateDynamics(self, u, noise=True):
-        vsig = np.sqrt(self.a1*u[0]**2 + self.a2*u[1]**2) * noise
-        wsig = np.sqrt(self.a3*u[0]**2 + self.a4*u[1]**2) * noise
-        vhat = u[0] + vsig*randn()
-        what = u[1] + wsig*randn()
+        vsig = np.sqrt(self.a1*u.item(0)**2 + self.a2*u.item(1)**2) * noise
+        wsig = np.sqrt(self.a3*u.item(0)**2 + self.a4*u.item(1)**2) * noise
+        vhat = u.item(0) + vsig*randn()
+        what = u.item(1) + wsig*randn()
         temp = vhat / what 
         w_dt = what * self.dt
         theta = self.x.item(2)
@@ -44,16 +45,16 @@ class TurtleBot:
     def getSensorMeasurement(self):
         if not self.landmarks.size > 1:
             return -1
-        z = np.zeros((len(self.landmarks), 2)) 
+        z = np.zeros((2,len(self.landmarks))) 
         for i, (mx,my) in enumerate(self.landmarks):
             x_diff, y_diff = mx - self.x.item(0), my - self.x.item(1)
             r = np.sqrt(x_diff**2 + y_diff**2)
             phi = np.arctan2(y_diff, x_diff) - self.x.item(2)
-            z[i] = np.array([r,phi]) + randn(1,2) @ self.Q_sqrt
-            z[i,1] = wrap(z[i,1])
+            z[:,i] = np.array([r,phi]) + self.Q_sqrt @ randn(2)
+        z[1] = wrap(z[1])
         return z 
 
-class EKF:
+class UKF:
     def __init__(self, alphas, sensor_covariance, sigma0=np.eye(3), 
             mu0=np.zeros((3,1)), ts=0.1, landmarks=np.empty(0)):
         self.a1, self.a2, self.a3, self.a4 = alphas
@@ -62,53 +63,95 @@ class EKF:
         self.mu = mu0
         self.mu[2,0] = wrap(self.mu[2,0])
         self.dt = ts
-        self.G = np.eye(3)
         self.landmarks = landmarks
+        self.mu_a = np.vstack([self.mu,0,0,0,0])
+        self.sigma_a = np.eye(7)
+        self.sigma_a[:3,:3] = self.sigma
+        self.sigma_a[-2:,-2:] = self.Q
+        self.chi_a = np.zeros((7,15))
+
+        alpha = 0.35
+        kappa = 3.5
+        beta = 2
+        n = len(self.mu_a)
+        lam = alpha**2 * (n + kappa) - n
+        wm_0 = lam / (n + lam)
+        wc_0 = wm_0 + (1 - alpha**2 + beta)
+        wi = np.ones(14) * (1 / (2*n+2*lam))
+        self.wm = np.hstack([wm_0,wi])
+        self.wc = np.hstack([wc_0,wi])
+        self.gamma = np.sqrt(n+lam)
 
     def predictionStep(self, u):
-        temp = u[0] / u[1]
-        w_dt = u[1] * self.dt
-        theta = self.mu.item(2)
+        # augmented variables
+        M = np.diag([self.a1*u.item(0)**2 + self.a2*u.item(1)**2,
+                     self.a3*u.item(0)**2 + self.a4*u.item(1)**2])
+        self.mu_a[:3] = self.mu
+        self.sigma_a[:3,:3] = self.sigma
+        self.sigma_a[3:5,3:5] = M
+        L = np.linalg.cholesky(self.sigma_a)
+        self.chi_a[:,0] = self.mu_a.flatten()
+        self.chi_a[:,1:8] = self.mu_a + self.gamma*L
+        self.chi_a[:, 8:] = self.mu_a - self.gamma*L
+        # propagate dynamics
+        u_a = u + self.chi_a[3:5]
+        temp = u_a[0] / u_a[1]
+        w_dt = u_a[1] * self.dt
+        theta = self.chi_a[2]
         cos_term = np.cos(theta) - np.cos(theta + w_dt)
         sin_term = np.sin(theta + w_dt) - np.sin(theta)
-        # g(u_t, mu_{t-1})
-        self.mu += np.array([[temp*sin_term], [temp*cos_term], [w_dt]])
-        self.mu[2,0] = wrap(self.mu[2,0])
-        # g' or G
-        self.G[0,2] = -temp*cos_term
-        self.G[1,2] = -temp*sin_term
-        # V
-        V = np.array([[sin_term/u[1], -temp*sin_term/u[1]],
-                      [cos_term/u[1], -temp*cos_term/u[1]],
-                      [0, self.dt]])
-        M = np.diag([self.a1*u[0]**2 + self.a2*u[1]**2,
-                     self.a3*u[0]**2 + self.a4*u[1]**2])
-        self.sigma = self.G @ self.sigma @ self.G.T + V @ M @ V.T
+        self.chi_a[:3] += np.block([[temp*sin_term], [temp*cos_term], [w_dt]])
+        self.chi_a[2] = wrap(self.chi_a[2])
+        # update mu
+        self.mu = np.sum(self.wm * self.chi_a[:3], 1, keepdims=True)
+        # update sigma
+        diff = self.chi_a[:3] - self.mu
+        self.sigma *= 0
+        for i in range(len(self.chi_a[0])):
+            self.sigma += self.wc[i] * np.outer(diff[:,i], diff[:,i])
+
         return self.mu, self.sigma
 
     def correctionStep(self, z):
-        z_hat = np.zeros((len(self.landmarks),2)) 
+        z_hat = np.zeros((2,len(self.landmarks))) 
         for i, (mx,my) in enumerate(self.landmarks):
-            x_diff, y_diff = mx - self.mu.item(0), my - self.mu.item(1)
+            x_diff, y_diff = mx - self.chi_a[0], my - self.chi_a[1]
             r_hat = np.sqrt(x_diff**2 + y_diff**2)
-            phi_hat = wrap(np.arctan2(y_diff, x_diff) - self.mu.item(2))
-            z_hat[i] = np.array([r_hat,phi_hat]) 
+            phi_hat = wrap(np.arctan2(y_diff, x_diff) - self.chi_a[2])
+            Zi = np.block([[r_hat],[phi_hat]]) + self.chi_a[-2:]
+            z_hat[:,i] = np.sum(self.wm * Zi, 1)
 
-            Hi = np.array([[-x_diff/r_hat, -y_diff/r_hat, 0],
-                           [y_diff/r_hat**2, -x_diff/r_hat**2, -1]])
-            Si = Hi @ self.sigma @ Hi.T + self.Q
-            Ki = self.sigma @ Hi.T @ np.linalg.inv(Si)
-            innov = (z[i] - z_hat[i]).reshape(2,1)
-            innov[1,0] = wrap(innov[1,0])
+            z_diff = Zi - z_hat[:,i].reshape(2,1)
+            mu_diff = self.chi_a[:3] - self.mu
+            mu_diff[2] = wrap(mu_diff[2])
+            Sj = np.zeros((2,2))
+            sig_xz = np.zeros((3,2))
+            for j in range(len(self.chi_a[0])):
+                Sj += self.wc[j] * np.outer(z_diff[:,j], z_diff[:,j])
+                sig_xz += self.wc[j] * np.outer(mu_diff[:,j] , z_diff[:,j])
+            Sj += self.Q
+
+            Ki = sig_xz @ np.linalg.inv(Sj)
+            innov = (z[:,i] - z_hat[:,i]).reshape(2,1)
+            innov[1] = wrap(innov[1])
             self.mu += Ki @ innov
-            self.mu[2,0] = wrap(self.mu[2,0])
-            self.sigma = (np.eye(3) - Ki @ Hi) @ self.sigma
+            self.mu[2] = wrap(self.mu[2])
+            self.sigma -= Ki @ Sj @ Ki.T
+
+            if not i == len(self.landmarks):
+                self.mu_a[:3] = self.mu
+                self.sigma_a[:3,:3] = self.sigma
+                L = np.linalg.cholesky(self.sigma_a)
+                self.chi_a[:,0] = self.mu_a.flatten()
+                self.chi_a[:,1:8] = self.mu_a + self.gamma*L
+                self.chi_a[:, 8:] = self.mu_a - self.gamma*L
 
         return self.mu, self.sigma, Ki, z_hat
 
 if __name__ == "__main__":
     ## parameters
     landmarks=np.array([[6,4],[-7,8],[6,-4]])
+#    landmarks=np.array([[6,4]])
     alpha = np.array([0.1, 0.01, 0.01, 0.1])
     Q = np.diag([0.1, 0.05])**2
     sigma = np.diag([1,1,0.1]) # confidence in inital condition
@@ -138,7 +181,7 @@ if __name__ == "__main__":
     turtlebot = TurtleBot(alpha, Q, x0=x0, ts=ts, landmarks=landmarks)
     
     ## extended kalman filter
-    ekf = EKF(alpha, Q, sigma0=sigma, mu0=xhat0, ts=ts, landmarks=landmarks)
+    ukf = UKF(alpha, Q, sigma0=sigma, mu0=xhat0, ts=ts, landmarks=landmarks)
     
     # plotting
     lims=[-10,10,-10,10]
@@ -150,7 +193,7 @@ if __name__ == "__main__":
         if i == 0:
             continue
         # input commands
-        u = [v_c[i], w_c[i]]
+        u = np.array([v_c[i], w_c[i]]).reshape(2,1)
     
         # propagate actual system
         x1 = turtlebot.propagateDynamics(u, noise=not load)
@@ -159,8 +202,8 @@ if __name__ == "__main__":
         z = turtlebot.getSensorMeasurement()
     
         # Kalman Filter 
-        xhat_bar, covariance_bar = ekf.predictionStep(u)
-        xhat, covariance, K, zhat = ekf.correctionStep(z)
+        xhat_bar, covariance_bar = ukf.predictionStep(u)
+        xhat, covariance, K, zhat = ukf.correctionStep(z)
         if (covariance_bar < covariance).all():
             print('BAD NEWS BEARS') # covariance shrinks with correction step
     

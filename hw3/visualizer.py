@@ -95,12 +95,12 @@ class Visualizer:
             self.est_dots.set_ydata(self.yhat_hist)
 
             est_lms = np.zeros(zhat.shape)
-            for i, (r,phi) in enumerate(zhat):
+            for i, (r,phi) in enumerate(zhat.T):
                 xi = est_pose.item(0) + r*np.cos(phi+theta)
                 yi = est_pose.item(1) + r*np.sin(phi+theta)
-                est_lms[i] = np.array([xi,yi])
-            self.est_lms.set_xdata(est_lms[:,0])
-            self.est_lms.set_ydata(est_lms[:,1])
+                est_lms[:,i] = np.array([xi,yi])
+            self.est_lms.set_xdata(est_lms[0,:])
+            self.est_lms.set_ydata(est_lms[1,:])
         
         self._display()
 
