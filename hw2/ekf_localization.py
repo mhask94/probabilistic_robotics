@@ -119,8 +119,6 @@ if __name__ == "__main__":
         load=False
         ts, tf = 0.1, 20
         time = np.linspace(0, tf, tf/ts+1)
-        v_c = 1 + 0.5*np.cos(2*np.pi*0.2*time)
-        w_c = -0.2 + 2*np.cos(2*np.pi*0.6*time)
         x0 = np.array([[-5.],[-3.],[np.pi/2]])
     elif len(args) == 1:
         load = True
@@ -130,9 +128,13 @@ if __name__ == "__main__":
         ts, tf = time[1], time[-1]
         x,y,theta = mat['x'][0], mat['y'][0], mat['th'][0]
         x0 = np.array([[x[0],y[0],theta[0]]]).T
-        v_c, w_c = mat['v'][0], mat['om'][0]
+        vn_c, wn_c = mat['v'][0], mat['om'][0]
     else:              
         print('[ERROR] Invalid number of arguments.')
+
+    # inputs
+    v_c = 1 + 0.5*np.cos(2*np.pi*0.2*time)
+    w_c = -0.2 + 2*np.cos(2*np.pi*0.6*time)
 
     ## system
     turtlebot = TurtleBot(alpha, Q, x0=x0, ts=ts, landmarks=landmarks)
@@ -151,15 +153,19 @@ if __name__ == "__main__":
             continue
         # input commands
         u = [v_c[i], w_c[i]]
+        if load:
+            un = [vn_c[i], wn_c[i]]
+        else:
+            un = u
     
         # propagate actual system
-        x1 = turtlebot.propagateDynamics(u, noise=not load)
+        x1 = turtlebot.propagateDynamics(un, noise=not load)
 
         # sensor measurement
         z = turtlebot.getSensorMeasurement()
     
         # Kalman Filter 
-        xhat_bar, covariance_bar = ekf.predictionStep(u)
+        xhat_bar, covariance_bar = ekf.predictionStep(un)
         xhat, covariance, K, zhat = ekf.correctionStep(z)
         if (covariance_bar < covariance).all():
             print('BAD NEWS BEARS') # covariance shrinks with correction step
