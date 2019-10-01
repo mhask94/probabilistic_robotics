@@ -8,7 +8,7 @@ from visualizer import Visualizer
 from scipy.io import loadmat
 
 def wrap(angle):
-    angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
+#    angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
     return angle
 
 class TurtleBot:
@@ -38,7 +38,7 @@ class TurtleBot:
             self.x += np.array([[temp*(np.sin(theta+w_dt)-np.sin(theta))],
                                 [temp*(np.cos(theta)-np.cos(theta+w_dt))],
                                 [w_dt]])
-        self.x[2,0] = wrap(self.x[2,0])
+        self.x[2,0] = wrap(self.x[2,0]) ###
         return self.x
 
     def getSensorMeasurement(self):
@@ -50,7 +50,7 @@ class TurtleBot:
             r = np.sqrt(x_diff**2 + y_diff**2)
             phi = np.arctan2(y_diff, x_diff) - self.x.item(2)
             z[:,i] = np.array([r,phi]) + self.Q_sqrt @ randn(2)
-        z[1] = wrap(z[1])
+        z[1] = wrap(z[1]) ###
         return z 
 
 class UKF:
@@ -100,14 +100,15 @@ class UKF:
         cos_term = np.cos(theta) - np.cos(theta + w_dt)
         sin_term = np.sin(theta + w_dt) - np.sin(theta)
         self.chi_a[:3] += np.block([[temp*sin_term], [temp*cos_term], [w_dt]])
-        self.chi_a[2] = wrap(self.chi_a[2])
+        self.chi_a[2] = wrap(self.chi_a[2]) ###
         # update mu
         self.mu = np.sum(self.wm * self.chi_a[:3], 1, keepdims=True)
+#        self.mu[2] = wrap(self.mu[2]) ###
         # update sigma
         diff = self.chi_a[:3] - self.mu
-        self.sigma *= 0
-        for i in range(len(self.chi_a[0])):
-            self.sigma += self.wc[i] * np.outer(diff[:,i], diff[:,i])
+        diff[2] = wrap(diff[2]) ###
+        self.sigma = np.sum(self.wc.reshape(15,1,1) * 
+                np.einsum('ij,kj->jik',diff,diff), axis=0)
 
         return self.mu, self.sigma
 
@@ -116,25 +117,26 @@ class UKF:
         for i, (mx,my) in enumerate(self.landmarks):
             x_diff, y_diff = mx - self.chi_a[0], my - self.chi_a[1]
             r_hat = np.sqrt(x_diff**2 + y_diff**2)
-            phi_hat = wrap(np.arctan2(y_diff, x_diff) - self.chi_a[2])
+            phi_hat = wrap(np.arctan2(y_diff, x_diff) - self.chi_a[2]) ###
             Zi = np.block([[r_hat],[phi_hat]]) + self.chi_a[-2:]
+            Zi[1] = wrap(Zi[1]) ###
             z_hat[:,i] = np.sum(self.wm * Zi, 1)
+            z_hat[1] = wrap(z_hat[1]) ###
 
             z_diff = Zi - z_hat[:,i].reshape(2,1)
+            z_diff[1] = wrap(z_diff[1]) ###
             mu_diff = self.chi_a[:3] - self.mu
-            mu_diff[2] = wrap(mu_diff[2])
-            Sj = np.zeros((2,2))
-            sig_xz = np.zeros((3,2))
-            for j in range(len(self.chi_a[0])):
-                Sj += self.wc[j] * np.outer(z_diff[:,j], z_diff[:,j])
-                sig_xz += self.wc[j] * np.outer(mu_diff[:,j] , z_diff[:,j])
-#            Sj += self.Q
+            mu_diff[2] = wrap(mu_diff[2]) ###
+            Sj = np.sum(self.wc.reshape(15,1,1) *
+                    np.einsum('ij,kj->jik', z_diff, z_diff), axis=0)
+            sig_xz = np.sum(self.wc.reshape(15,1,1) * 
+                    np.einsum('ij,kj->jik', mu_diff, z_diff), axis=0)
 
             Ki = sig_xz @ np.linalg.inv(Sj)
             innov = (z[:,i] - z_hat[:,i]).reshape(2,1)
-            innov[1] = wrap(innov[1])
+            innov[1] = wrap(innov[1]) ###
             self.mu += Ki @ innov
-            self.mu[2] = wrap(self.mu[2])
+            self.mu[2] = wrap(self.mu[2]) ###
             self.sigma -= Ki @ Sj @ Ki.T
 
             if not i == len(self.landmarks):
@@ -144,6 +146,7 @@ class UKF:
                 self.chi_a[:,0] = self.mu_a.flatten()
                 self.chi_a[:,1:8] = self.mu_a + self.gamma*L
                 self.chi_a[:, 8:] = self.mu_a - self.gamma*L
+                self.chi_a[2] = wrap(self.chi_a[2]) ###
 
         return self.mu, self.sigma, Ki, z_hat
 
