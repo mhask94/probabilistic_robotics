@@ -165,7 +165,7 @@ if __name__ == "__main__":
         z = turtlebot.getSensorMeasurement()
     
         # Kalman Filter 
-        xhat_bar, covariance_bar = ekf.predictionStep(un)
+        xhat_bar, covariance_bar = ekf.predictionStep(u)
         xhat, covariance, K, zhat = ekf.correctionStep(z)
         if (covariance_bar < covariance).all():
             print('BAD NEWS BEARS') # covariance shrinks with correction step
