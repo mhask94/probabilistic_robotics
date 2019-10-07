@@ -7,8 +7,11 @@ import control as ctrl
 from visualizer import Visualizer
 from scipy.io import loadmat
 
-def wrap(angle):
-#    angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
+def wrap(angle, dim=None):
+    if dim:
+        angle[dim] -= 2*np.pi * np.floor((angle[dim] + np.pi) / (2*np.pi))
+    else:
+        angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
     return angle
 
 class MotionModel():
@@ -54,24 +57,26 @@ class TurtleBot:
         self.a1, self.a2, self.a3, self.a4 = alphas
         self.h = meas_model
         self.Q_sqrt = np.sqrt(sensor_covariance)
-        self.x = x0
-        self.x[2,0] = wrap(self.x[2,0])
+        self.x = wrap(x0, dim=2)
         self.landmarks = landmarks
     
     def propagateDynamics(self, u, noise=True):
+        # add noise to commanded inputs
         u_noisy = np.zeros(u.shape)
         vsig = np.sqrt(self.a1*u[0]**2 + self.a2*u[1]**2) * noise
         wsig = np.sqrt(self.a3*u[0]**2 + self.a4*u[1]**2) * noise
         u_noisy[0] = u[0] + vsig*randn(len(vsig))
         u_noisy[1] = u[1] + wsig*randn(len(wsig))
+        # propagate through motion_model
         self.x = self.g(u_noisy, self.x)
         return self.x
 
     def getSensorMeasurement(self):
         if not self.landmarks.size > 1:
-            return -1
+            return -1 # error if no landmarks provided
         z = np.zeros((2,len(self.landmarks))) 
         for i, (mx,my) in enumerate(self.landmarks):
+            # add noise to measurement model
             z[:,i] = self.h(self.x, mx, my).flatten() + self.Q_sqrt @ randn(2)
         z[1] = wrap(z[1]) ###
         return z 
@@ -84,15 +89,14 @@ class ParticleFilter:
         self.h = meas_model
         self.Q = sensor_covariance
         self.sigma = sigma0 
-        self.mu = mu0
-        self.mu[2,0] = wrap(self.mu[2,0])
+        self.mu = wrap(mu0, dim=2)
         self.landmarks = landmarks
         self.mu_a = np.vstack([self.mu,0,0,0,0])
         self.sigma_a = np.eye(7)
         self.sigma_a[:3,:3] = self.sigma
         self.sigma_a[-2:,-2:] = self.Q
         self.chi_a = np.zeros((7,15))
-
+        # calculate weights
         alpha = 0.35
         kappa = 3.5
         beta = 2
@@ -105,26 +109,31 @@ class ParticleFilter:
         self.wc = np.hstack([wc_0,wi])
         self.gamma = np.sqrt(n+lam)
 
-    def predictionStep(self, u):
-        # augmented variables
-        M = np.diag([self.a1*u.item(0)**2 + self.a2*u.item(1)**2,
-                     self.a3*u.item(0)**2 + self.a4*u.item(1)**2])
+    def _calcSigmaPoints(self, M=[], update_M=False):
         self.mu_a[:3] = self.mu
         self.sigma_a[:3,:3] = self.sigma
-        self.sigma_a[3:5,3:5] = M
+        if update_M:
+            self.sigma_a[3:5,3:5] = M
         L = np.linalg.cholesky(self.sigma_a)
         self.chi_a[:,0] = self.mu_a.flatten()
         self.chi_a[:,1:8] = self.mu_a + self.gamma*L
         self.chi_a[:, 8:] = self.mu_a - self.gamma*L
+        self.chi_a = wrap(self.chi_a, dim=2)
+#        if not update_M: # might not be needed, though it fixed wrapping issues
+#            self.chi_a[2] = wrap(self.chi_a[2]) 
+
+    def predictionStep(self, u):
+        # augmented variables
+        M = np.diag([self.a1*u.item(0)**2 + self.a2*u.item(1)**2,
+                     self.a3*u.item(0)**2 + self.a4*u.item(1)**2])
+        self._calcSigmaPoints(M, update_M=True)
         u_a = u + self.chi_a[3:5]
-        # propagate dynamics
+        # propagate dynamics through motion model
         self.chi_a[:3] = self.g(u_a, self.chi_a[:3])
         # update mu
         self.mu = np.sum(self.wm * self.chi_a[:3], 1, keepdims=True)
-        self.mu[2] = wrap(self.mu[2]) ###
         # update sigma
-        diff = self.chi_a[:3] - self.mu
-        diff[2] = wrap(diff[2]) ###
+        diff = wrap(self.chi_a[:3] - self.mu, dim=2)
         self.sigma = np.einsum('ij,kj->ik', self.wc*diff, diff)
 
         return self.mu, self.sigma
@@ -133,32 +142,20 @@ class ParticleFilter:
         z_hat = np.zeros((2,len(self.landmarks))) 
         for i, (mx,my) in enumerate(self.landmarks):
             Zi = self.h(self.chi_a[:3], mx, my) + self.chi_a[-2:]
-#            Zi[1] = wrap(Zi[1]) ###
             z_hat[:,i] = np.sum(self.wm * Zi, 1)
-            z_hat[1] = wrap(z_hat[1]) ###
 
-            z_diff = Zi - z_hat[:,i].reshape(2,1)
-            z_diff[1] = wrap(z_diff[1]) ###
-            mu_diff = self.chi_a[:3] - self.mu
-            mu_diff[2] = wrap(mu_diff[2]) ###
+            z_diff = wrap(Zi - z_hat[:,i].reshape(2,1), dim=1)
+            mu_diff = wrap(self.chi_a[:3] - self.mu, dim=2)
             Sj = np.einsum('ij,kj->ik', self.wc*z_diff, z_diff)
             sig_xz = np.einsum('ij,kj->ik', self.wc*mu_diff, z_diff)
 
             Ki = sig_xz @ np.linalg.inv(Sj)
-            innov = (z[:,i] - z_hat[:,i]).reshape(2,1)
-            innov[1] = wrap(innov[1]) ###
-            self.mu += Ki @ innov
-            self.mu[2] = wrap(self.mu[2]) ###
+            innov = wrap((z[:,i] - z_hat[:,i]).reshape(2,1), dim=1)
+            self.mu = wrap(self.mu + Ki @ innov, dim=2)
             self.sigma -= Ki @ Sj @ Ki.T
 
             if not i == len(self.landmarks):
-                self.mu_a[:3] = self.mu
-                self.sigma_a[:3,:3] = self.sigma
-                L = np.linalg.cholesky(self.sigma_a)
-                self.chi_a[:,0] = self.mu_a.flatten()
-                self.chi_a[:,1:8] = self.mu_a + self.gamma*L
-                self.chi_a[:, 8:] = self.mu_a - self.gamma*L
-                self.chi_a[2] = wrap(self.chi_a[2]) ###
+                self._calcSigmaPoints()
 
         return self.mu, self.sigma, Ki, z_hat
 
@@ -198,10 +195,10 @@ if __name__ == "__main__":
     meas_model = MeasurementModel()
 
     ## system
-    turtlebot = TurtleBot(motion_model,alpha,meas_model, Q, x0=x0, landmarks=landmarks)
+    turtlebot = TurtleBot(motion_model, alpha, meas_model, Q, x0, landmarks)
     
     ## extended kalman filter
-    ukf = ParticleFilter(motion_model,alpha,meas_model, Q, sigma0=sigma, mu0=xhat0, landmarks=landmarks)
+    ukf = ParticleFilter(motion_model,alpha,meas_model, Q, sigma, xhat0, landmarks)
     
     # plotting
     lims=[-10,10,-10,10]
