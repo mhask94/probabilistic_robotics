@@ -7,68 +7,95 @@ import control as ctrl
 from visualizer import Visualizer
 from scipy.io import loadmat
 
-def wrap(angle):
-#    angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
+def wrap(angle, dim=None):
+    if dim:
+        angle[dim] -= 2*np.pi * np.floor((angle[dim] + np.pi) / (2*np.pi))
+    else:
+        angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
     return angle
 
-class TurtleBot:
-    def __init__(self,alphas, sensor_covariance, x0=np.zeros((3,1)),
-            ts=0.1, landmarks=np.empty(0)):
-        self.a1, self.a2, self.a3, self.a4 = alphas
-        self.Q_sqrt = np.sqrt(sensor_covariance)
-        self.x = x0
-        self.x[2,0] = wrap(self.x[2,0])
+class MotionModel():
+    def __init__(self, ts=0.1):
         self.dt = ts
+
+    def __call__(self, u, x_m1):
+        n0, = np.where(u[1] != 0)    # non-zero indices of omega
+        vhat = u[0] 
+        what = u[1] 
+        temp = vhat[n0] / what[n0] 
+        w_dt = what * self.dt
+        theta = x_m1[2][n0]
+
+        x = np.zeros(x_m1.shape)
+        x[0][n0] = x_m1[0][n0] + temp*(np.sin(theta+w_dt[n0])-np.sin(theta))
+        x[1][n0] = x_m1[1][n0] + temp*(np.cos(theta)-np.cos(theta+w_dt[n0]))
+        x[2] = wrap(x_m1[2] + w_dt)
+
+        if len(n0) != len(u[1]): 
+            print('OMEGA CONTAINS ZEROS')
+            y0, = np.where(u[1] == 0) # zero indices of omega
+            theta = x_m1[2][y0]
+            x[0][y0] = x_m1[0][y0] + vhat[y0]*self.dt*np.cos(theta)
+            x[1][y0] = x_m1[1][y0] + vhat[y0]*self.dt*np.sin(theta)
+        return x
+
+class MeasurementModel():
+    def __init__(self):
+        pass
+
+    def __call__(self, states, mx, my):
+        x_diff, y_diff = mx - states[0], my - states[1]
+        r = np.sqrt(x_diff**2 + y_diff**2)
+        phi = np.arctan2(y_diff, x_diff) - states[2]
+        return np.block([[r], [phi]])
+
+class TurtleBot:
+    def __init__(self, motion_model, alphas, meas_model, sensor_covariance,
+            x0=np.zeros((3,1)), landmarks=np.empty(0)):
+        self.g = motion_model
+        self.a1, self.a2, self.a3, self.a4 = alphas
+        self.h = meas_model
+        self.Q_sqrt = np.sqrt(sensor_covariance)
+        self.x = wrap(x0, dim=2)
         self.landmarks = landmarks
     
     def propagateDynamics(self, u, noise=True):
-        vsig = np.sqrt(self.a1*u.item(0)**2 + self.a2*u.item(1)**2) * noise
-        wsig = np.sqrt(self.a3*u.item(0)**2 + self.a4*u.item(1)**2) * noise
-        vhat = u.item(0) + vsig*randn()
-        what = u.item(1) + wsig*randn()
-        temp = vhat / what 
-        w_dt = what * self.dt
-        theta = self.x.item(2)
-
-        if u[1] == 0:
-            self.x += np.array([[vhat*self.dt*np.sin(theta)],
-                                [vhat*self.dt*np.cos(theta)],
-                                [0]])
-        else:
-            self.x += np.array([[temp*(np.sin(theta+w_dt)-np.sin(theta))],
-                                [temp*(np.cos(theta)-np.cos(theta+w_dt))],
-                                [w_dt]])
-        self.x[2,0] = wrap(self.x[2,0]) ###
+        # add noise to commanded inputs
+        u_noisy = np.zeros(u.shape)
+        vsig = np.sqrt(self.a1*u[0]**2 + self.a2*u[1]**2) * noise
+        wsig = np.sqrt(self.a3*u[0]**2 + self.a4*u[1]**2) * noise
+        u_noisy[0] = u[0] + vsig*randn(len(vsig))
+        u_noisy[1] = u[1] + wsig*randn(len(wsig))
+        # propagate through motion_model
+        self.x = self.g(u_noisy, self.x)
         return self.x
 
     def getSensorMeasurement(self):
         if not self.landmarks.size > 1:
-            return -1
+            return -1 # error if no landmarks provided
         z = np.zeros((2,len(self.landmarks))) 
         for i, (mx,my) in enumerate(self.landmarks):
-            x_diff, y_diff = mx - self.x.item(0), my - self.x.item(1)
-            r = np.sqrt(x_diff**2 + y_diff**2)
-            phi = np.arctan2(y_diff, x_diff) - self.x.item(2)
-            z[:,i] = np.array([r,phi]) + self.Q_sqrt @ randn(2)
-        z[1] = wrap(z[1]) ###
+            # add noise to measurement model
+            z[:,i] = self.h(self.x, mx, my).flatten() + self.Q_sqrt @ randn(2)
+        z[1] = wrap(z[1]) 
         return z 
 
 class UKF:
-    def __init__(self, alphas, sensor_covariance, sigma0=np.eye(3), 
-            mu0=np.zeros((3,1)), ts=0.1, landmarks=np.empty(0)):
+    def __init__(self, motion_model, alphas, meas_model, sensor_covariance,
+            sigma0=np.eye(3), mu0=np.zeros((3,1)), landmarks=np.empty(0)):
+        self.g = motion_model
         self.a1, self.a2, self.a3, self.a4 = alphas
+        self.h = meas_model
         self.Q = sensor_covariance
         self.sigma = sigma0 
-        self.mu = mu0
-        self.mu[2,0] = wrap(self.mu[2,0])
-        self.dt = ts
+        self.mu = wrap(mu0, dim=2)
         self.landmarks = landmarks
         self.mu_a = np.vstack([self.mu,0,0,0,0])
         self.sigma_a = np.eye(7)
         self.sigma_a[:3,:3] = self.sigma
         self.sigma_a[-2:,-2:] = self.Q
         self.chi_a = np.zeros((7,15))
-
+        # calculate weights
         alpha = 0.35
         kappa = 3.5
         beta = 2
@@ -81,72 +108,54 @@ class UKF:
         self.wc = np.hstack([wc_0,wi])
         self.gamma = np.sqrt(n+lam)
 
-    def predictionStep(self, u):
-        # augmented variables
-        M = np.diag([self.a1*u.item(0)**2 + self.a2*u.item(1)**2,
-                     self.a3*u.item(0)**2 + self.a4*u.item(1)**2])
+    def _calcSigmaPoints(self, M=[], update_M=False):
         self.mu_a[:3] = self.mu
         self.sigma_a[:3,:3] = self.sigma
-        self.sigma_a[3:5,3:5] = M
+        if update_M:
+            self.sigma_a[3:5,3:5] = M
         L = np.linalg.cholesky(self.sigma_a)
         self.chi_a[:,0] = self.mu_a.flatten()
         self.chi_a[:,1:8] = self.mu_a + self.gamma*L
         self.chi_a[:, 8:] = self.mu_a - self.gamma*L
-        # propagate dynamics
+        self.chi_a = wrap(self.chi_a, dim=2)
+#        if not update_M: # might not be needed, though it fixed wrapping issues
+#            self.chi_a[2] = wrap(self.chi_a[2]) 
+
+
+    def predictionStep(self, u):
+        # augmented variables
+        M = np.diag([self.a1*u.item(0)**2 + self.a2*u.item(1)**2,
+                     self.a3*u.item(0)**2 + self.a4*u.item(1)**2])
+        self._calcSigmaPoints(M, update_M=True)
         u_a = u + self.chi_a[3:5]
-        temp = u_a[0] / u_a[1]
-        w_dt = u_a[1] * self.dt
-        theta = self.chi_a[2]
-        cos_term = np.cos(theta) - np.cos(theta + w_dt)
-        sin_term = np.sin(theta + w_dt) - np.sin(theta)
-        self.chi_a[:3] += np.block([[temp*sin_term], [temp*cos_term], [w_dt]])
-        self.chi_a[2] = wrap(self.chi_a[2]) ###
+        # propagate dynamics through motion model
+        self.chi_a[:3] = self.g(u_a, self.chi_a[:3])
         # update mu
         self.mu = np.sum(self.wm * self.chi_a[:3], 1, keepdims=True)
-#        self.mu[2] = wrap(self.mu[2]) ###
         # update sigma
-        diff = self.chi_a[:3] - self.mu
-        diff[2] = wrap(diff[2]) ###
-        self.sigma = np.sum(self.wc.reshape(15,1,1) * 
-                np.einsum('ij,kj->jik',diff,diff), axis=0)
+        diff = wrap(self.chi_a[:3] - self.mu, dim=2)
+        self.sigma = np.einsum('ij,kj->ik', self.wc*diff, diff)
 
         return self.mu, self.sigma
 
     def correctionStep(self, z):
         z_hat = np.zeros((2,len(self.landmarks))) 
         for i, (mx,my) in enumerate(self.landmarks):
-            x_diff, y_diff = mx - self.chi_a[0], my - self.chi_a[1]
-            r_hat = np.sqrt(x_diff**2 + y_diff**2)
-            phi_hat = wrap(np.arctan2(y_diff, x_diff) - self.chi_a[2]) ###
-            Zi = np.block([[r_hat],[phi_hat]]) + self.chi_a[-2:]
-            Zi[1] = wrap(Zi[1]) ###
+            Zi = self.h(self.chi_a[:3], mx, my) + self.chi_a[-2:]
             z_hat[:,i] = np.sum(self.wm * Zi, 1)
-            z_hat[1] = wrap(z_hat[1]) ###
 
-            z_diff = Zi - z_hat[:,i].reshape(2,1)
-            z_diff[1] = wrap(z_diff[1]) ###
-            mu_diff = self.chi_a[:3] - self.mu
-            mu_diff[2] = wrap(mu_diff[2]) ###
-            Sj = np.sum(self.wc.reshape(15,1,1) *
-                    np.einsum('ij,kj->jik', z_diff, z_diff), axis=0)
-            sig_xz = np.sum(self.wc.reshape(15,1,1) * 
-                    np.einsum('ij,kj->jik', mu_diff, z_diff), axis=0)
+            z_diff = wrap(Zi - z_hat[:,i].reshape(2,1), dim=1)
+            mu_diff = wrap(self.chi_a[:3] - self.mu, dim=2)
+            Sj = np.einsum('ij,kj->ik', self.wc*z_diff, z_diff)
+            sig_xz = np.einsum('ij,kj->ik', self.wc*mu_diff, z_diff)
 
             Ki = sig_xz @ np.linalg.inv(Sj)
-            innov = (z[:,i] - z_hat[:,i]).reshape(2,1)
-            innov[1] = wrap(innov[1]) ###
-            self.mu += Ki @ innov
-            self.mu[2] = wrap(self.mu[2]) ###
+            innov = wrap((z[:,i] - z_hat[:,i]).reshape(2,1), dim=1)
+            self.mu = wrap(self.mu + Ki @ innov, dim=2)
             self.sigma -= Ki @ Sj @ Ki.T
 
             if not i == len(self.landmarks):
-                self.mu_a[:3] = self.mu
-                self.sigma_a[:3,:3] = self.sigma
-                L = np.linalg.cholesky(self.sigma_a)
-                self.chi_a[:,0] = self.mu_a.flatten()
-                self.chi_a[:,1:8] = self.mu_a + self.gamma*L
-                self.chi_a[:, 8:] = self.mu_a - self.gamma*L
-                self.chi_a[2] = wrap(self.chi_a[2]) ###
+                self._calcSigmaPoints()
 
         return self.mu, self.sigma, Ki, z_hat
 
@@ -181,11 +190,15 @@ if __name__ == "__main__":
     v_c = 1 + 0.5*np.cos(2*np.pi*0.2*time)
     w_c = -0.2 + 2*np.cos(2*np.pi*0.6*time)
 
+    # models
+    motion_mod = MotionModel(ts=ts)
+    meas_mod = MeasurementModel()
+
     ## system
-    turtlebot = TurtleBot(alpha, Q, x0=x0, ts=ts, landmarks=landmarks)
+    turtlebot = TurtleBot(motion_mod, alpha, meas_mod, Q, x0, landmarks)
     
     ## extended kalman filter
-    ukf = UKF(alpha, Q, sigma0=sigma, mu0=xhat0, ts=ts, landmarks=landmarks)
+    ukf = UKF(motion_mod, alpha, meas_mod, Q, sigma, xhat0, landmarks)
     
     # plotting
     lims=[-10,10,-10,10]
