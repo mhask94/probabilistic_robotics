@@ -6,14 +6,11 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 
 def wrap(angle):
-    while angle > np.pi:
-        angle -= 2*np.pi
-    while angle < -np.pi:
-        angle += 2*np.pi
+    angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
     return angle
 
 class Visualizer:
-    def __init__(self, limits=[-10,10,-10,10], x0=np.zeros((3,1)),
+    def __init__(self, limits=[-10,10,-10,10], x0=np.zeros((3,1)), particles=[],
             xhat0=np.zeros((3,1)), sigma0=np.eye(3), landmarks=np.empty(0),
             live=True):
         self.time_hist = [0]
@@ -50,20 +47,20 @@ class Visualizer:
         self.y2sig_hist = [2*np.sqrt(sigma0[1,1].item())]
         self.theta2sig_hist = [2*np.sqrt(sigma0[2,2].item())]
 
-        self.K_hist = []
-
         self.live = live
         if self.live:
-            self.true_dots, = self.ax.plot(self.x_hist,self.y_hist, 'b.',
-                    markersize=3, label='truth')
-            self.est_dots, = self.ax.plot(self.xhat_hist,self.yhat_hist, 'r.',
-                    markersize=3, label='estimates')
+#            self.true_dots, = self.ax.plot(self.x_hist,self.y_hist, 'b.',
+#                    markersize=3, label='truth')
+#            self.est_dots, = self.ax.plot(self.xhat_hist,self.yhat_hist, 'r.',
+#                    markersize=3, label='estimates')
             self.est_lms, = self.ax.plot(20,20, 'rx', label='est landmark')
+            self.particle_dots, = self.ax.plot(particles[0],particles[1], 'r.',
+                    markersize=2, label='particles')
 
         self.ax.legend()
         self._display()
 
-    def update(self, t, true_pose, est_pose, covariance, kalman_gain, zhat):
+    def update(self, t, true_pose, particles, est_pose, covariance, zhat):
         self.time_hist.append(t)
         x,y,theta = true_pose.reshape(len(true_pose))
         self.circ.set_center((x,y))
@@ -86,13 +83,13 @@ class Visualizer:
         self.y2sig_hist.append(2*np.sqrt(covariance[1,1].item()))
         self.theta2sig_hist.append(2*np.sqrt(covariance[2,2].item()))
 
-        self.K_hist.append(kalman_gain.reshape(kalman_gain.size).tolist())
-
         if self.live:
-            self.true_dots.set_xdata(self.x_hist)
-            self.true_dots.set_ydata(self.y_hist)
-            self.est_dots.set_xdata(self.xhat_hist)
-            self.est_dots.set_ydata(self.yhat_hist)
+#            self.true_dots.set_xdata(self.x_hist)
+#            self.true_dots.set_ydata(self.y_hist)
+#            self.est_dots.set_xdata(self.xhat_hist)
+#            self.est_dots.set_ydata(self.yhat_hist)
+            self.particle_dots.set_xdata(particles[0])
+            self.particle_dots.set_ydata(particles[1])
 
             est_lms = np.zeros(zhat.shape)
             for i, (r,phi) in enumerate(zhat.T):
@@ -153,14 +150,6 @@ class Visualizer:
         axes3[2].set_ylabel('Theta Error (rad)')
         axes3[2].set_xlabel('Time (s)')
         axes3[2].legend()
-
-        fig4, ax4 = plt.subplots()
-        ax4.plot(self.time_hist[1:], self.K_hist)
-        ax4.set_title('Kalman Gains')
-        ax4.set_xlabel('Time (s)')
-        ax4.set_ylabel('Gain')
-        ax4.legend(['x, r','x, $\phi$', 'y, r','y, $\phi$','$\\theta$, r',
-                '$\\theta, \phi$'])
 
         self._display()
         input('Press ENTER to close...')
