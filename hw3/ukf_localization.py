@@ -96,8 +96,8 @@ class UKF:
         self.sigma_a[-2:,-2:] = self.Q
         self.chi_a = np.zeros((7,15))
         # calculate weights
-        alpha = 0.35
-        kappa = 3.5
+        alpha = 0.4 # 0.35
+        kappa = 4.0 # 3.5
         beta = 2
         n = len(self.mu_a)
         lam = alpha**2 * (n + kappa) - n
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     alpha = np.array([0.1, 0.01, 0.01, 0.1])
     Q = np.diag([0.1, 0.05])**2
     sigma = np.diag([1,1,0.1]) # confidence in inital condition
-    xhat0 = np.array([[0.],[0.],[0.]]) # changing this causes error initially
+    xhat0 = np.array([[-4.5],[-3.7],[np.pi/2-0.05]]) 
 
     args = sys.argv[1:]
     if len(args) == 0:
@@ -187,8 +187,10 @@ if __name__ == "__main__":
         print('[ERROR] Invalid number of arguments.')
 
     # inputs
-    v_c = 1 + 0.5*np.cos(2*np.pi*0.2*time)
-    w_c = -0.2 + 2*np.cos(2*np.pi*0.6*time)
+#    v_c = 1 + 0.5*np.cos(2*np.pi*0.2*time)
+#    w_c = -0.2 + 2*np.cos(2*np.pi*0.6*time)
+    v_c = 1 + 0.5*np.sin(2*np.pi*0.3*time)
+    w_c = -0.2 + 2*np.cos(2*np.pi*1.0*time)
 
     # models
     motion_mod = MotionModel(ts=ts)
@@ -210,20 +212,20 @@ if __name__ == "__main__":
         if i == 0:
             continue
         # input commands
-        u = np.array([v_c[i], w_c[i]]).reshape(2,1)
+        uc = np.array([v_c[i], w_c[i]]).reshape(2,1)
         if load:
-            un = np.array([vn_c[i], wn_c[i]]).reshape(2,1)
+            u = np.array([vn_c[i], wn_c[i]]).reshape(2,1)
         else:
-            un = u
+            u = uc
     
         # propagate actual system
-        x1 = turtlebot.propagateDynamics(un, noise=not load)
+        x1 = turtlebot.propagateDynamics(u, noise=not load)
 
         # sensor measurement
         z = turtlebot.getSensorMeasurement()
     
         # Kalman Filter 
-        xhat_bar, covariance_bar = ukf.predictionStep(u)
+        xhat_bar, covariance_bar = ukf.predictionStep(uc)
         xhat, covariance, K, zhat = ukf.correctionStep(z)
         if (covariance_bar < covariance).all():
             print('BAD NEWS BEARS') # covariance shrinks with correction step
