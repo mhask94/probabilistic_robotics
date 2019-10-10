@@ -1,0 +1,3 @@
+[submodule "turtlebot_lab"]
+	path = turtlebot_lab
+	url = git@github.com:mhask94/turtlebot_lab.git

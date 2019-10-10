@@ -3,7 +3,6 @@
 import sys
 import numpy as np
 from numpy.random import randn as randn
-import control as ctrl
 from visualizer import Visualizer
 from scipy.io import loadmat
 
