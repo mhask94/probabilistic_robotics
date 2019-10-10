@@ -108,14 +108,12 @@ class ParticleFilter:
     def _low_var_resample(self):
         M_inv = 1/self.M
         r = rand(min_=0, max_=M_inv)
-        c = self.chi[-1][0]
-        i = 0
-        for m in range(self.M):
-            U = r + (m-1)*M_inv
-            while U > c:
-                i += 1
-                c += self.chi[-1][i]
-            self.chi[:3,m] = self.chi[:3,i]
+        c = np.cumsum(self.chi[-1])
+        U = np.arange(self.M)*M_inv + r
+        diff = c- U[:,None]
+        i = np.argmax(diff > 0, axis=1)
+
+        self.chi = self.chi[:,i]
 
     def predictionStep(self, u):
         # add noise to commanded inputs
@@ -128,7 +126,6 @@ class ParticleFilter:
         self.chi[:3] = self.g(u_noisy, self.chi[:3])
         # update mu
         self.mu = np.mean(self.chi[:3], axis=1, keepdims=True)
-#        self.mu = self.g(u, self.mu)
 
         return self.mu 
 
@@ -146,10 +143,8 @@ class ParticleFilter:
         self.chi[-1] /= np.sum(self.chi[-1])
         self._low_var_resample()
 
-#        self.mu = np.sum(self.chi[-1]*self.chi[:3], axis=1, keepdims=True)
         self.mu = np.mean(self.chi[:3], axis=1, keepdims=True)
         mu_diff = wrap(self.chi[:3] - self.mu, dim=2)
-#        self.sigma = np.cov(mu_diff, aweights=self.chi[-1])
         self.sigma = np.cov(mu_diff)
         self.mu[2] = wrap(self.mu[2])
 
@@ -161,8 +156,6 @@ if __name__ == "__main__":
 #    landmarks=np.array([[6,4]])
     alpha = np.array([0.1, 0.01, 0.01, 0.1])
     Q = np.diag([0.1, 0.05])**2
-#    sigma = np.diag([1,1,0.1]) # confidence in inital condition
-#    xhat0 = np.array([[0.],[0.],[0.]]) # changing this causes error initially
     M = 1000
 
     args = sys.argv[1:]
