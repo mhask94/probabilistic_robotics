@@ -6,7 +6,7 @@ from numpy.random import randn as randn
 from visualizer import Visualizer
 from scipy.io import loadmat
 
-import pdb
+from IPython.core.debugger import set_trace
 
 def wrap(angle, dim=None):
     if dim:
@@ -19,24 +19,39 @@ def rand(size=(), min_=0, max_=1):
     return min_ + np.random.rand(*size)*(max_ - min_)
 
 class MotionModel():
-    def __init__(self, ts=0.1):
+    def __init__(self, alphas, ts=0.1, noise=True):
+        self.a1, self.a2, self.a3, self.a4 = alphas[:4]
+        if len(alphas) == 6:
+            self.a5, self.a6 = alphas[4:6]
+        else:
+            self.a5, self.a6 = 0, 0
         self.dt = ts
+        self.noise = noise
 
     def __call__(self, u, x_m1):
-        n0, = np.where(u[1] != 0)    # non-zero indices of omega
-        vhat = u[0] 
-        what = u[1] 
+        # add noise if needed
+        u_noisy = np.zeros((len(u), len(x_m1[0])))
+        vsig = np.sqrt(self.a1*u[0]**2 + self.a2*u[1]**2) * self.noise
+        wsig = np.sqrt(self.a3*u[0]**2 + self.a4*u[1]**2) * self.noise
+        gamsig = np.sqrt(self.a5*u[0]**2 + self.a6*u[1]**2) * self.noise
+        u_noisy[0] = u[0] + vsig*randn(len(x_m1[0]))
+        u_noisy[1] = u[1] + wsig*randn(len(x_m1[1]))
+
+        n0, = np.where(u_noisy[1] != 0)    # non-zero indices of omega
+        vhat = u_noisy[0] 
+        what = u_noisy[1] 
         temp = vhat[n0] / what[n0] 
         w_dt = what * self.dt
+        gamma_dt = gamsig*randn(len(w_dt)) * self.dt
         theta = x_m1[2][n0]
 
         x = np.zeros(x_m1.shape)
         x[0][n0] = x_m1[0][n0] + temp*(np.sin(theta+w_dt[n0])-np.sin(theta))
         x[1][n0] = x_m1[1][n0] + temp*(np.cos(theta)-np.cos(theta+w_dt[n0]))
-        x[2] = wrap(x_m1[2] + w_dt)
+        x[2] = wrap(x_m1[2] + w_dt + gamma_dt)
 
-        if len(n0) != len(u[1]): 
-            y0, = np.where(u[1] == 0) # zero indices of omega
+        if len(n0) != len(u_noisy[1]): 
+            y0, = np.where(u_noisy[1] == 0) # zero indices of omega
             theta = x_m1[2][y0]
             x[0][y0] = x_m1[0][y0] + vhat[y0]*self.dt*np.cos(theta)
             x[1][y0] = x_m1[1][y0] + vhat[y0]*self.dt*np.sin(theta)
@@ -54,24 +69,17 @@ class MeasurementModel():
 
 
 class TurtleBot:
-    def __init__(self, alphas, sensor_covariance, dt=0.1,
-            x0=np.zeros((3,1)), landmarks=np.empty(0)):
-        self.a1, self.a2, self.a3, self.a4 = alphas
+    def __init__(self, motion_model, sensor_covariance, x0=np.zeros((3,1)), 
+            landmarks=np.empty(0)):
         self.Q_sqrt = np.sqrt(sensor_covariance)
-        self.g = MotionModel(dt)
+        self.g = motion_model
         self.h = MeasurementModel()
         self.x = wrap(x0, dim=2)
         self.landmarks = landmarks
     
-    def propagateDynamics(self, u, noise=True):
-        # add noise to commanded inputs
-        u_noisy = np.zeros(u.shape)
-        vsig = np.sqrt(self.a1*u[0]**2 + self.a2*u[1]**2) * noise
-        wsig = np.sqrt(self.a3*u[0]**2 + self.a4*u[1]**2) * noise
-        u_noisy[0] = u[0] + vsig*randn(len(vsig))
-        u_noisy[1] = u[1] + wsig*randn(len(wsig))
+    def propagateDynamics(self, u):
         # propagate through motion_model
-        self.x = self.g(u_noisy, self.x)
+        self.x = self.g(u, self.x)
         return self.x
 
     def getSensorMeasurement(self):
@@ -85,11 +93,10 @@ class TurtleBot:
         return z 
 
 class ParticleFilter:
-    def __init__(self, alphas, sensor_covariance, dt=0.1, num_particles=1000,
+    def __init__(self, motion_model, sensor_covariance, num_particles=1000,
             landmarks=np.empty(0)):
-        self.a1, self.a2, self.a3, self.a4 = alphas
         self.Q = sensor_covariance.diagonal().reshape((len(Q),1))
-        self.g = MotionModel(dt)
+        self.g = motion_model
         self.h = MeasurementModel()
         self.M = num_particles
         self.landmarks = landmarks
@@ -116,14 +123,8 @@ class ParticleFilter:
         self.chi = self.chi[:,i]
 
     def predictionStep(self, u):
-        # add noise to commanded inputs
-        u_noisy = np.zeros((len(u), self.M))
-        vsig = np.sqrt(self.a1*u[0]**2 + self.a2*u[1]**2)
-        wsig = np.sqrt(self.a3*u[0]**2 + self.a4*u[1]**2)
-        u_noisy[0] = u[0] + vsig*randn(self.M)
-        u_noisy[1] = u[1] + wsig*randn(self.M)
         # propagate dynamics through motion model
-        self.chi[:3] = self.g(u_noisy, self.chi[:3])
+        self.chi[:3] = self.g(u, self.chi[:3])
         # update mu
         self.mu = np.mean(self.chi[:3], axis=1, keepdims=True)
 
@@ -136,8 +137,8 @@ class ParticleFilter:
             Zi = self.h(self.chi[:3], mx, my)
             diff = wrap(Zi - z[:,i:i+1], dim=1)
             z_prob = np.prod(self._gauss_prob(diff, 2*self.Q), axis=0)
-            z_prob /= np.sum(z_prob)
             self.chi[-1] *= z_prob
+            z_prob /= np.sum(z_prob)
             z_hat[:,i] = np.sum(z_prob * Zi, axis=1)
 
         self.chi[-1] /= np.sum(self.chi[-1])
@@ -154,7 +155,7 @@ if __name__ == "__main__":
     ## parameters
     landmarks=np.array([[6,4],[-7,8],[6,-4]])
 #    landmarks=np.array([[6,4]])
-    alpha = np.array([0.1, 0.01, 0.01, 0.1])
+    alpha = np.array([0.1, 0.01, 0.01, 0.1, 0.01, 0.01])
     Q = np.diag([0.1, 0.05])**2
     M = 1000
 
@@ -181,10 +182,12 @@ if __name__ == "__main__":
     w_c = -0.2 + 2*np.cos(2*np.pi*0.6*time)
 
     ## system
-    turtlebot = TurtleBot(alpha, Q, ts, x0, landmarks)
+    bot_motion_mod = MotionModel(alpha[:4], ts, noise=not load)
+    turtlebot = TurtleBot(bot_motion_mod, Q, x0, landmarks)
     
     ## extended kalman filter
-    pf = ParticleFilter(alpha, Q, ts, M, landmarks)
+    pf_motion_mod = MotionModel(alpha, ts, noise=True)
+    pf = ParticleFilter(pf_motion_mod, Q, M, landmarks)
     
     # plotting
     lims=[-10,10,-10,10]
@@ -203,7 +206,7 @@ if __name__ == "__main__":
             un = u
     
         # propagate actual system
-        x1 = turtlebot.propagateDynamics(un, noise=not load)
+        x1 = turtlebot.propagateDynamics(un)
 
         # sensor measurement
         z = turtlebot.getSensorMeasurement()

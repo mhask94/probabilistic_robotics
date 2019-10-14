@@ -1,4 +1,3 @@
-
 #!/usr/bin/python3
 
 import numpy as np
@@ -59,6 +58,7 @@ class Visualizer:
 
         self.ax.legend()
         self._display()
+        input('Press ENTER to start...')
 
     def update(self, t, true_pose, particles, est_pose, covariance, zhat):
         self.time_hist.append(t)
