@@ -58,7 +58,6 @@ class Visualizer:
 
         self.ax.legend()
         self._display()
-        input('Press ENTER to start...')
 
     def update(self, t, true_pose, particles, est_pose, covariance, zhat):
         self.time_hist.append(t)
@@ -98,7 +97,7 @@ class Visualizer:
                 est_lms[:,i] = np.array([xi,yi])
             self.est_lms.set_xdata(est_lms[0,:])
             self.est_lms.set_ydata(est_lms[1,:])
-        
+
         self._display()
 
     def plotHistory(self):
