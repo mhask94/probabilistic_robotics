@@ -65,7 +65,7 @@ class MeasurementModel():
         x_diff, y_diff = mx - states[0], my - states[1]
         r = np.sqrt(x_diff**2 + y_diff**2)
         phi = np.arctan2(y_diff, x_diff) - states[2]
-        return np.block([[r], [phi]])
+        return np.block([[r], [wrap(phi)]])
 
 
 class TurtleBot:
@@ -104,10 +104,11 @@ class ParticleFilter:
         self.chi[0:2] *= rand(self.chi[0:2].shape, -20, 20)
         self.chi[2] *= rand(self.chi[2].shape, -np.pi, np.pi)
         self.chi[-1] = 1 / num_particles
-        self.mu = np.sum(self.chi[-1]*self.chi[:3], axis=1, keepdims=True)
-        mu_diff = wrap(self.chi[:3] - self.mu, dim=2)
-        self.sigma = np.einsum('ij,kj->ik', self.chi[-1]*mu_diff, mu_diff)
-        self.mu[2] = wrap(self.mu[2])
+        self._update_belief()
+
+    def _update_belief(self):
+        self.mu = wrap(np.mean(self.chi[:3], axis=1, keepdims=True), dim=2)
+        self.sigma = np.cov(self.chi[:3])
 
     def _gauss_prob(self, diff, var):
         return np.exp(-diff**2/2/var) / np.sqrt(2*np.pi*var)
@@ -117,16 +118,24 @@ class ParticleFilter:
         r = rand(min_=0, max_=M_inv)
         c = np.cumsum(self.chi[-1])
         U = np.arange(self.M)*M_inv + r
-        diff = c- U[:,None]
+        diff = c - U[:,None]
         i = np.argmax(diff > 0, axis=1)
 
+        n = 3 # num states
+
+        P = np.cov(self.chi[:n])
         self.chi = self.chi[:,i]
 
+        uniq = np.unique(i).size
+        if uniq*M_inv < 0.1:
+            Q = P / ((self.M*uniq)**(1.5/n))
+            noise = Q @ randn(*self.chi[:n].shape)
+            self.chi[:n] = wrap(self.chi[:n] + noise, dim=2)
+        self.chi[-1] = M_inv
+
     def predictionStep(self, u):
-        # propagate dynamics through motion model
         self.chi[:3] = self.g(u, self.chi[:3])
-        # update mu
-        self.mu = np.mean(self.chi[:3], axis=1, keepdims=True)
+        self._update_belief()
 
         return self.mu 
 
@@ -140,14 +149,10 @@ class ParticleFilter:
             self.chi[-1] *= z_prob
             z_prob /= np.sum(z_prob)
             z_hat[:,i] = np.sum(z_prob * Zi, axis=1)
-
         self.chi[-1] /= np.sum(self.chi[-1])
-        self._low_var_resample()
 
-        self.mu = np.mean(self.chi[:3], axis=1, keepdims=True)
-        mu_diff = wrap(self.chi[:3] - self.mu, dim=2)
-        self.sigma = np.cov(mu_diff)
-        self.mu[2] = wrap(self.mu[2])
+        self._low_var_resample()
+        self._update_belief()
 
         return self.mu, self.sigma, z_hat
 
@@ -155,7 +160,7 @@ if __name__ == "__main__":
     ## parameters
     landmarks=np.array([[6,4],[-7,8],[6,-4]])
 #    landmarks=np.array([[6,4]])
-    alpha = np.array([0.1, 0.01, 0.01, 0.1, 0.01, 0.01])
+    alpha = np.array([0.1, 0.01, 0.01, 0.1]) #, 0.01, 0.01])
     Q = np.diag([0.1, 0.05])**2
     M = 1000
 
