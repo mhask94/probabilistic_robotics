@@ -1,11 +1,12 @@
 import sys
 import time
-import scipy
+from scipy.linalg import norm
 from scipy.io import loadmat
 from pyqtgraph.Qt import QtCore, QtGui
 from PyQt5.QtCore import Qt
 import numpy as np
 import pyqtgraph as pg
+from occupancy_grid_map
 
 class Map():
     def __init__(self, xsize, ysize, grid_size):
@@ -38,7 +39,7 @@ class Map():
         theta_to_grid[theta_to_grid > np.pi] -= 2. * np.pi
         theta_to_grid[theta_to_grid < -np.pi] += 2. * np.pi
 
-        dist_to_grid = scipy.linalg.norm(dx, axis=0) # matrix of L2 distance to all cells from robot
+        dist_to_grid = norm(dx, axis=0) # matrix of L2 distance to all cells from robot
 
         # For each laser beam
         for z_i in z:
