@@ -9,17 +9,14 @@ def wrap(angle):
     return angle
 
 class Visualizer:
-    def __init__(self, limits=[-10,10,-10,10], x0=np.zeros((3,1)), particles=[],
-            xhat0=np.zeros((3,1)), sigma0=np.eye(3), landmarks=np.empty(0),
-            live=True):
-        self.time_hist = [0]
+    def __init__(self, limits, map0, x0, z0, live=True):
         plt.rcParams["figure.figsize"] = (9,7)
         self.fig, self.ax = plt.subplots()
         self.ax.axis(limits)
-        self.ax.set_title('Turtlebot Simulation')
+        self.ax.set_title('Occupancy Grid Map Simulation')
         self.ax.set_xlabel('X (m)')
         self.ax.set_ylabel('Y (m)')
-        x,y,theta = x0.reshape(len(x0))
+        x,y,theta = x0.flatten()
         self.R = 0.75
         self.circ = Circle((x,y), radius=self.R, color='y', ec='k')
         self.ax.add_patch(self.circ)
