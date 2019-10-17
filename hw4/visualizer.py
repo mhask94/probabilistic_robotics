@@ -48,12 +48,12 @@ class Visualizer:
 
         self.live = live
         if self.live:
-#            self.true_dots, = self.ax.plot(self.x_hist,self.y_hist, 'b.',
-#                    markersize=3, label='truth')
-#            self.est_dots, = self.ax.plot(self.xhat_hist,self.yhat_hist, 'r.',
-#                    markersize=3, label='estimates')
+            self.true_dots, = self.ax.plot(self.x_hist,self.y_hist, 'b.',
+                    markersize=3, label='truth')
+            self.est_dots, = self.ax.plot(self.xhat_hist,self.yhat_hist, 'r.',
+                    markersize=3, label='estimates')
             self.est_lms, = self.ax.plot(20,20, 'rx', label='est landmark')
-            self.particle_dots, = self.ax.plot(particles[0],particles[1], 'r.',
+            self.particle_dots, = self.ax.plot(particles[0],particles[1], 'g.',
                     markersize=2, label='particles')
 
         self.ax.legend()
@@ -83,10 +83,10 @@ class Visualizer:
         self.theta2sig_hist.append(2*np.sqrt(covariance[2,2].item()))
 
         if self.live:
-#            self.true_dots.set_xdata(self.x_hist)
-#            self.true_dots.set_ydata(self.y_hist)
-#            self.est_dots.set_xdata(self.xhat_hist)
-#            self.est_dots.set_ydata(self.yhat_hist)
+            self.true_dots.set_xdata(self.x_hist)
+            self.true_dots.set_ydata(self.y_hist)
+            self.est_dots.set_xdata(self.xhat_hist)
+            self.est_dots.set_ydata(self.yhat_hist)
             self.particle_dots.set_xdata(particles[0])
             self.particle_dots.set_ydata(particles[1])
 
@@ -150,8 +150,7 @@ class Visualizer:
         axes3[2].set_xlabel('Time (s)')
         axes3[2].legend()
 
-        self._display()
-        input('Press ENTER to close...')
+        plt.show()
 
     def _display(self):
         plt.pause(0.000001)
