@@ -1,9 +1,58 @@
 import sys
 import time
+import scipy
+from scipy.io import loadmat
 from pyqtgraph.Qt import QtCore, QtGui
 from PyQt5.QtCore import Qt
 import numpy as np
 import pyqtgraph as pg
+
+class Map():
+    def __init__(self, xsize, ysize, grid_size):
+        self.xsize = xsize+2 # Add extra cells for the borders
+        self.ysize = ysize+2
+        self.grid_size = grid_size # save this off for future use
+        self.log_prob_map = np.zeros((self.xsize, self.ysize)) # set all to zero
+
+        self.alpha = 1.0 # The assumed thickness of obstacles
+        self.beta = 5.0*np.pi/180.0 # The assumed width of the laser beam
+        self.z_max = 150.0 # The max reading from the laser
+
+        # Pre-allocate the x and y positions of all grid positions into a 3D tensor
+        # (pre-allocation = faster)
+        self.grid_position_m = np.array([np.tile(np.arange(0, self.xsize*self.grid_size, self.grid_size)[:,None], (1, self.ysize)),
+                                         np.tile(np.arange(0, self.ysize*self.grid_size, self.grid_size)[:,None].T, (self.xsize, 1))], dtype=np.float64)
+
+        # Log-Probabilities to add or remove from the map 
+        self.l_occ = np.log(0.65/0.35)
+        self.l_free = np.log(0.35/0.65)
+
+    def update_map(self, pose, z):
+
+        dx = self.grid_position_m.copy() # A tensor of coordinates of all cells
+        dx[0, :, :] -= pose[0] # A matrix of all the x coordinates of the cell
+        dx[1, :, :] -= pose[1] # A matrix of all the y coordinates of the cell
+        theta_to_grid = np.arctan2(dx[1, :, :], dx[0, :, :]) - pose[2] # matrix of all bearings from robot to cell
+
+        # Wrap to +pi / - pi
+        theta_to_grid[theta_to_grid > np.pi] -= 2. * np.pi
+        theta_to_grid[theta_to_grid < -np.pi] += 2. * np.pi
+
+        dist_to_grid = scipy.linalg.norm(dx, axis=0) # matrix of L2 distance to all cells from robot
+
+        # For each laser beam
+        for z_i in z:
+            r = z_i[0] # range measured
+            b = z_i[1] # bearing measured
+
+            # Calculate which cells are measured free or occupied, so we know which cells to update
+            # Doing it this way is like a billion times faster than looping through each cell (because vectorized numpy is the only way to numpy)
+            free_mask = (np.abs(theta_to_grid - b) <= self.beta/2.0) & (dist_to_grid < (r - self.alpha/2.0))
+            occ_mask = (np.abs(theta_to_grid - b) <= self.beta/2.0) & (np.abs(dist_to_grid - r) <= self.alpha/2.0)
+
+            # Adjust the cells appropriately
+            self.log_prob_map[occ_mask] += self.l_occ
+            self.log_prob_map[free_mask] += self.l_free
 
 class CircleItem(pg.GraphicsObject):
     def __init__(self, center, radius):
@@ -31,8 +80,14 @@ class CircleItem(pg.GraphicsObject):
         return QtCore.QRectF(self.picture.boundingRect())
 
 class App(QtGui.QMainWindow):
-    def __init__(self, parent=None):
+    def __init__(self, X, z, parent=None):
         super(App, self).__init__(parent)
+        self.X = X
+        self.z = z
+        self.idx = 0
+        self.running = True
+        grid_size = 1
+        self.map = Map(100//grid_size, 100//grid_size, grid_size)
 
         #### Create Gui Elements ###########
         self.mainbox = QtGui.QWidget()
@@ -51,21 +106,12 @@ class App(QtGui.QMainWindow):
 
         #  image plot
         self.img = pg.ImageItem(border='w')
-        self.circ = CircleItem(np.array([50,50]), 1.5) 
+        self.circ = CircleItem(self.X[:2,self.idx], 1.5) 
         self.view.addItem(self.img)
         self.view.addItem(self.circ)
 
-#        self.canvas.nextRow()
-        #  line plot
-#        self.otherplot = self.canvas.addPlot()
-#        self.h2 = self.otherplot.plot(pen='y')
-
 
         #### Set Data  #####################
-        self.pos = np.array([5.,5.])
-
-        self.x = np.linspace(0,50., num=100)
-        self.X,self.Y = np.meshgrid(self.x,self.x)
 
         self.counter = 0
         self.fps = 0.
@@ -75,22 +121,17 @@ class App(QtGui.QMainWindow):
         self._update()
 
     def _update(self):
+        if self.running:
+            self.map.update_map(self.X[:,self.idx], self.z[:,:,self.idx].T)
+            data = 1/(1 + np.exp(self.map.log_prob_map))
+            self.img.setImage(data)
 
-#        self.data = np.sin(self.X/3.+self.counter/9.)*np.cos(self.Y/3.+self.counter/9.)
-        self.data = np.ones((100,100,3)) * np.random.rand(100,100,1)
-        if self.counter % 100 == 0: 
-            self.pos += 0.1 
-        self.circ.setCenter(self.pos)
-#        print('X size: ', self.X.shape)
-#        print('Y size: ', self.Y.shape)
-#        print('data size: ', self.data.shape)
-#        print('max: ', np.max(self.data))
-#        print('min: ', np.min(self.data))
-#        exit()
-        self.ydata = np.sin(self.x/3.+ self.counter/9.)
+            self.circ.setCenter(self.X[:2,self.idx])
 
-        self.img.setImage(self.data)
-#        self.h2.setData(self.ydata)
+            self.idx += 1
+            if self.idx >= len(self.X[0]):
+                self.running = False
+                print('Finished Running')
 
         now = time.time()
         dt = (now-self.lastupdate)
@@ -104,10 +145,31 @@ class App(QtGui.QMainWindow):
         QtCore.QTimer.singleShot(1, self._update)
         self.counter += 1
 
+__usage__ = 'Usage: python3 occupancy_grid_mapping.py <filename>.mat'
+
+def __error__(msg):
+    print('[ERROR] ' + msg)
+    exit()
+
 
 if __name__ == '__main__':
+    args = sys.argv[1:]
+    if sys.version_info[0] < 3:
+        __error__('Requires Python 3.')
 
-    app = QtGui.QApplication(sys.argv)
-    thisapp = App()
+    if len(args) == 1:
+        filename = args[0]
+        if not filename[-4:] == '.mat':
+            __error__('Invalid file extention, expected .mat')
+        data = loadmat(filename)
+    else:
+        __error__('Invalid number of arguments, expected 1.\n' + __usage__)
+
+    pose = data['X']
+    thk = data['thk']
+    z = data['z']
+
+    app = QtGui.QApplication(['Occupancy Grid Mapping'])
+    thisapp = App(pose, z)
     thisapp.show()
     sys.exit(app.exec_())
