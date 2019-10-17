@@ -3,6 +3,8 @@
 import sys
 import numpy as np
 from scipy.io import loadmat
+from visualizer import Visualizer
+from tqdm import tqdm
 
 __usage__ = 'Usage: python3 occupancy_grid_mapping.py <filename>.mat'
 
@@ -27,5 +29,11 @@ if __name__ == "__main__":
     thk = data['thk']
     z = data['z']
 
-    for i in range(len(pose[0])):
-        
+    lims = [0, 100, 0, 100]
+
+    viz = Visualizer(lims, [], pose[:,0], [], live=True)
+
+    for i in tqdm(range(len(pose[0]))):
+        viz.update(pose[:,i], []) 
+
+    viz.plotHistory()
