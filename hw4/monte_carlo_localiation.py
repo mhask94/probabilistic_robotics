@@ -15,9 +15,6 @@ def wrap(angle, dim=None):
         angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
     return angle
 
-def rand(size=(), min_=0, max_=1):
-    return min_ + np.random.rand(*size)*(max_ - min_)
-
 class MotionModel():
     def __init__(self, alphas, ts=0.1, noise=True):
         self.a1, self.a2, self.a3, self.a4 = alphas[:4]
@@ -100,9 +97,10 @@ class ParticleFilter:
         self.h = MeasurementModel()
         self.M = num_particles
         self.landmarks = landmarks
-        self.chi = np.ones((4,num_particles))
-        self.chi[0:2] *= rand(self.chi[0:2].shape, -20, 20)
-        self.chi[2] *= rand(self.chi[2].shape, -np.pi, np.pi)
+        self.chi = np.empty((4,num_particles))
+        self.chi[0] = np.random.uniform(-10, 10, self.M)
+        self.chi[1] = np.random.uniform(-10, 10, self.M)
+        self.chi[2] = np.random.uniform(-np.pi, np.pi, self.M)
         self.chi[-1] = 1 / num_particles
         self._update_belief()
 
@@ -115,7 +113,7 @@ class ParticleFilter:
 
     def _low_var_resample(self):
         M_inv = 1/self.M
-        r = rand(min_=0, max_=M_inv)
+        r = np.random.uniform(low=0, high=M_inv)
         c = np.cumsum(self.chi[-1])
         U = np.arange(self.M)*M_inv + r
         diff = c - U[:,None]
@@ -128,7 +126,7 @@ class ParticleFilter:
 
         uniq = np.unique(i).size
         if uniq*M_inv < 0.1:
-            Q = P / ((self.M*uniq)**(1.5/n))
+            Q = P / ((self.M*uniq)**(1/n))
             noise = Q @ randn(*self.chi[:n].shape)
             self.chi[:n] = wrap(self.chi[:n] + noise, dim=2)
         self.chi[-1] = M_inv
