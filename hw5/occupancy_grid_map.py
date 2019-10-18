@@ -44,8 +44,6 @@ class OccupancyGridMap():
         theta_to_grid = np.arctan2(dx[1, :, :], dx[0, :, :]) - theta # matrix of all bearings from robot to cell
 
         # Wrap to +pi / - pi
-#        theta_to_grid[theta_to_grid > np.pi] -= 2. * np.pi
-#        theta_to_grid[theta_to_grid < -np.pi] += 2. * np.pi
         theta_to_grid = wrap(theta_to_grid)
 
         dist_to_grid = norm(dx, axis=0) # matrix of L2 distance to all cells from robot
