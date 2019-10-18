@@ -50,6 +50,9 @@ class OccupancyGridMap():
 
         # For each laser beam
         for z_i in z:
+            if np.sum(np.isnan(z_i)) > 0:
+                continue
+
             r = z_i[0] # range measured
             b = z_i[1] # bearing measured
 
