@@ -58,10 +58,13 @@ class OccupancyGridMap():
 
             # Calculate which cells are measured free or occupied, so we know which cells to update
             # Doing it this way is like a billion times faster than looping through each cell (because vectorized numpy is the only way to numpy)
-            free_mask = (np.abs(theta_to_grid - b) <= self.beta/2.0) & (dist_to_grid < (r - self.alpha/2.0))
-            occ_mask = (np.abs(theta_to_grid - b) <= self.beta/2.0) & (np.abs(dist_to_grid - r) <= self.alpha/2.0)
+            free_mask = (np.abs(theta_to_grid - b) <= self.beta/2.0) & \
+                (dist_to_grid < min(self.z_max, r - self.alpha/2.0))
+            occ_mask = (np.abs(theta_to_grid - b) <= self.beta/2.0) & \
+                (np.abs(dist_to_grid - r) <= self.alpha/2.0)
 
             # Adjust the cells appropriately
             self.log_prob_map[occ_mask] += self.l_occ
             self.log_prob_map[free_mask] += self.l_free
 
+#        theta_to_grid[theta_to_grid < -np.pi] += 2. * np.pi
