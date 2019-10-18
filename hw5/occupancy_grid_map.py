@@ -5,6 +5,14 @@
 from scipy.linalg import norm
 import numpy as np
 
+def wrap(angle, dim=None):
+    if dim:
+        angle[dim] -= 2*np.pi * np.floor((angle[dim] + np.pi) / (2*np.pi))
+    else:
+        angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
+    return angle
+
+
 class OccupancyGridMap():
     def __init__(self, xsize, ysize, grid_size):
         self.xsize = xsize+2 # Add extra cells for the borders
@@ -19,11 +27,13 @@ class OccupancyGridMap():
         # Pre-allocate the x and y positions of all grid positions into a 3D tensor
         # (pre-allocation = faster)
         self.grid_position_m = np.array([np.tile(np.arange(0, self.xsize*self.grid_size, self.grid_size)[:,None], (1, self.ysize)),
-                                         np.tile(np.arange(0, self.ysize*self.grid_size, self.grid_size)[:,None].T, (self.xsize, 1))])
+                                         np.tile(np.arange(0, self.ysize*self.grid_size, self.grid_size)[:,None].T, (self.xsize, 1))],dtype=np.float64)
 
         # Log-Probabilities to add or remove from the map 
-        self.l_occ = np.log(0.65/0.35)
-        self.l_free = np.log(0.35/0.65)
+        p_occ = 0.65
+        p_free = 1 - p_occ
+        self.l_occ = np.log(p_occ/p_free)
+        self.l_free = np.log(p_free/p_occ)
 
     def update_map(self, pose, z):
         x,y,theta = pose
@@ -34,8 +44,9 @@ class OccupancyGridMap():
         theta_to_grid = np.arctan2(dx[1, :, :], dx[0, :, :]) - theta # matrix of all bearings from robot to cell
 
         # Wrap to +pi / - pi
-        theta_to_grid[theta_to_grid > np.pi] -= 2. * np.pi
-        theta_to_grid[theta_to_grid < -np.pi] += 2. * np.pi
+#        theta_to_grid[theta_to_grid > np.pi] -= 2. * np.pi
+#        theta_to_grid[theta_to_grid < -np.pi] += 2. * np.pi
+        theta_to_grid = wrap(theta_to_grid)
 
         dist_to_grid = norm(dx, axis=0) # matrix of L2 distance to all cells from robot
 

@@ -1,10 +1,7 @@
-#!/usr/bin/python3
-
 import sys
-import numpy as np
 from scipy.io import loadmat
-from visualizer import Visualizer
-from tqdm import tqdm
+from pyqtgraph.Qt import QtGui
+from app import App
 
 __usage__ = 'Usage: python3 occupancy_grid_mapping.py <filename>.mat'
 
@@ -12,7 +9,7 @@ def __error__(msg):
     print('[ERROR] ' + msg)
     exit()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     args = sys.argv[1:]
     if sys.version_info[0] < 3:
         __error__('Requires Python 3.')
@@ -29,11 +26,7 @@ if __name__ == "__main__":
     thk = data['thk']
     z = data['z']
 
-    lims = [0, 100, 0, 100]
-
-    viz = Visualizer(lims, [], pose[:,0], [], live=True)
-
-    for i in tqdm(range(len(pose[0]))):
-        viz.update(pose[:,i], []) 
-
-    viz.plotHistory()
+    app = QtGui.QApplication(['Occupancy Grid Mapping'])
+    thisapp = App(pose, z)
+    thisapp.show()
+    sys.exit(app.exec_())
