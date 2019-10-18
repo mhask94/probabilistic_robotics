@@ -89,16 +89,17 @@ class App(QtGui.QMainWindow):
             self.idx += 1
             if self.idx >= len(self.X[0]):
                 self.running = False
-                print('Finished Running')
 
-        now = time.time()
-        dt = (now-self.lastupdate)
-        if dt <= 0:
-            dt = 0.000000000001
-        fps2 = 1.0 / dt
-        self.lastupdate = now
-        self.fps = self.fps * 0.9 + fps2 * 0.1
-        tx = 'Mean Frame Rate:  {fps:.3f} FPS'.format(fps=self.fps )
+            now = time.time()
+            dt = (now-self.lastupdate)
+            if dt <= 0:
+                dt = 0.000000000001
+            fps2 = 1.0 / dt
+            self.lastupdate = now
+            self.fps = self.fps * 0.9 + fps2 * 0.1
+            tx = 'Mean Frame Rate:  {fps:.3f} FPS'.format(fps=self.fps )
+            QtCore.QTimer.singleShot(1, self._update)
+            self.counter += 1
+        else:
+            tx = 'Finished Mapping!'
         self.label.setText(tx)
-        QtCore.QTimer.singleShot(1, self._update)
-        self.counter += 1

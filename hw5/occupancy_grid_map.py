@@ -14,57 +14,62 @@ def wrap(angle, dim=None):
 
 
 class OccupancyGridMap():
+    '''
+    intertial frame: origin @ bottom left of map, x -> right, y -> up
+    vehicle frame: origin @ location of vehicle, same rotation as inertial
+    body frame: origin @ vehicle, rotated from inertial by theta
+    '''
     def __init__(self, xsize, ysize, grid_size):
-        self.xsize = xsize+2 # Add extra cells for the borders
-        self.ysize = ysize+2
-        self.grid_size = grid_size # save this off for future use
-        self.log_prob_map = np.zeros((self.xsize, self.ysize)) # set all to zero
+        self.xsize = xsize 
+        self.ysize = ysize
+        self.log_prob_map = np.zeros((self.xsize, self.ysize))
 
-        self.alpha = 1.0 # The assumed thickness of obstacles
-        self.beta = 5.0*np.pi/180.0 # The assumed width of the laser beam
-        self.z_max = 150.0 # The max reading from the laser
+        self.alpha = 1.0            # assumed thickness of obstacles
+        self.beta = 5.0*np.pi/180.0 # assumed width of the laser beam
+        self.z_max = 150.0          # max range of the laser
 
-        # Pre-allocate the x and y positions of all grid positions into a 3D tensor
-        # (pre-allocation = faster)
-        self.grid_position_m = np.array([np.tile(np.arange(0, self.xsize*self.grid_size, self.grid_size)[:,None], (1, self.ysize)),
-                                         np.tile(np.arange(0, self.ysize*self.grid_size, self.grid_size)[:,None].T, (self.xsize, 1))],dtype=np.float64)
+        # Pre-allocate the x and y of all grid positions into a 3D tensor
+        self.cell_coords = np.array(
+                [np.tile(np.arange(0, self.xsize*grid_size, 
+                     grid_size)[:,None], (1, self.ysize)),
+                 np.tile(np.arange(0, self.ysize*grid_size, 
+                     grid_size)[:,None].T, (self.xsize, 1))],dtype=np.float64)
 
-        # Log-Probabilities to add or remove from the map 
+        # log-probabilities to add or remove from the map 
+        # log-prob = log[p(m) / (1 + p(m))]
         p_occ = 0.65
         p_free = 1 - p_occ
         self.l_occ = np.log(p_occ/p_free)
         self.l_free = np.log(p_free/p_occ)
+        self.l0 = np.log(1/(1-0)) # equals 0 (don't update cells out of view)
 
     def update_map(self, pose, z):
         x,y,theta = pose
+        
+        dx = self.cell_coords.copy() # inertial frame cell coordinates
+        dx[0] -= x # x coordinates of cells in vehicle frame
+        dx[1] -= y # y coordinates of cells in vehicle frame
 
-        dx = self.grid_position_m.copy() # A tensor of coordinates of all cells
-        dx[0, :, :] -= x # A matrix of all the x coordinates of the cell
-        dx[1, :, :] -= y # A matrix of all the y coordinates of the cell
-        theta_to_grid = np.arctan2(dx[1, :, :], dx[0, :, :]) - theta # matrix of all bearings from robot to cell
+        grid_b = wrap(np.arctan2(dx[1], dx[0]) - theta) # body frame bearings
+        grid_r = norm(dx, axis=0) # body frame range to each cell
 
-        # Wrap to +pi / - pi
-        theta_to_grid = wrap(theta_to_grid)
-
-        dist_to_grid = norm(dx, axis=0) # matrix of L2 distance to all cells from robot
-
-        # For each laser beam
+        # for each laser beam
         for z_i in z:
             if np.sum(np.isnan(z_i)) > 0:
-                continue
+                continue # ignore nans
+            r = z_i[0] # measured range 
+            b = z_i[1] # measured bearing
 
-            r = z_i[0] # range measured
-            b = z_i[1] # bearing measured
+            '''
+            free_mask: all cells in view of laser beams that are unoccupied
+            occ_mask:  all cells in view of laser beams that are occupied
+            '''
+            free_mask = (np.abs(grid_b - b) <= self.beta/2.0) & \
+                (grid_r < min(self.z_max, r - self.alpha/2.0))
+            occ_mask = (np.abs(grid_b - b) <= self.beta/2.0) & \
+                (np.abs(grid_r - r) <= self.alpha/2.0)
 
-            # Calculate which cells are measured free or occupied, so we know which cells to update
-            # Doing it this way is like a billion times faster than looping through each cell (because vectorized numpy is the only way to numpy)
-            free_mask = (np.abs(theta_to_grid - b) <= self.beta/2.0) & \
-                (dist_to_grid < min(self.z_max, r - self.alpha/2.0))
-            occ_mask = (np.abs(theta_to_grid - b) <= self.beta/2.0) & \
-                (np.abs(dist_to_grid - r) <= self.alpha/2.0)
+            # apply measurement update to cells in view of laser beams
+            self.log_prob_map[occ_mask]  += self.l_occ - self.l0
+            self.log_prob_map[free_mask] += self.l_free - self.l0
 
-            # Adjust the cells appropriately
-            self.log_prob_map[occ_mask] += self.l_occ
-            self.log_prob_map[free_mask] += self.l_free
-
-#        theta_to_grid[theta_to_grid < -np.pi] += 2. * np.pi
