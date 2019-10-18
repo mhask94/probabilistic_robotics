@@ -3,7 +3,7 @@ from scipy.io import loadmat
 from pyqtgraph.Qt import QtGui
 from app import App
 
-__usage__ = 'Usage: python3 occupancy_grid_mapping.py <filename>.mat'
+__usage__ = 'Usage: python3 main.py <filename>.mat'
 
 def __error__(msg):
     print('[ERROR] ' + msg)
