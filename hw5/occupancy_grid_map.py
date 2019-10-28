@@ -20,8 +20,8 @@ class OccupancyGridMap():
     body frame: origin @ vehicle, rotated from inertial by theta
     '''
     def __init__(self, xsize, ysize, grid_size):
-        self.xsize = xsize 
-        self.ysize = ysize
+        self.xsize = xsize + 2 # add extra border to show right wall
+        self.ysize = ysize + 2 # add extra border to show top wall
         self.log_prob_map = np.zeros((self.xsize, self.ysize))
 
         self.alpha = 1.0            # assumed thickness of obstacles
