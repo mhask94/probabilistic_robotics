@@ -29,11 +29,8 @@ class OccupancyGridMap():
         self.z_max = 150.0          # max range of the laser
 
         # Pre-allocate the x and y of all grid positions into a 3D tensor
-        self.cell_coords = np.array(
-                [np.tile(np.arange(0, self.xsize*grid_size, 
-                     grid_size)[:,None], (1, self.ysize)),
-                 np.tile(np.arange(0, self.ysize*grid_size, 
-                     grid_size)[:,None].T, (self.xsize, 1))],dtype=np.float64)
+        self.cell_coords = np.array(np.meshgrid(np.arange(self.xsize*grid_size),
+            np.arange(self.ysize*grid_size), indexing='ij'), dtype=np.float64)
 
         # log-probabilities to add or remove from the map 
         # log-prob = log[p(m) / (1 + p(m))]
