@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Ellipse
 
 def wrap(angle):
     angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
@@ -52,12 +52,17 @@ class Visualizer:
                     markersize=3, label='truth')
             self.est_dots, = self.ax.plot(self.xhat_hist,self.yhat_hist, 'r.',
                     markersize=3, label='estimates')
-            self.est_lms, = self.ax.plot(20,20, 'rx', label='est landmark')
+            self.est_lms, = self.ax.plot(20,20, 'gx', label='est landmark')
+            self.ellipses = []
+            for lm in landmarks:
+                ell = Ellipse([20,20], 1, 1, ec='g', fill=False)
+                self.ellipses.append(ell)
+                self.ax.add_patch(ell)
 
         self.ax.legend()
         self._display()
 
-    def update(self, t, true_pose, est_pose, covariance, zhat):
+    def update(self, t, true_pose, est_pose, covariance, mu_m, sig_mm):
         self.time_hist.append(t)
         x,y,theta = true_pose.reshape(len(true_pose))
 
@@ -87,13 +92,20 @@ class Visualizer:
             self.est_dots.set_xdata(self.xhat_hist)
             self.est_dots.set_ydata(self.yhat_hist)
 
-            est_lms = np.zeros(zhat.shape)
-            for i, (r,phi) in enumerate(zhat.T):
-                xi = est_pose.item(0) + r*np.cos(phi+theta)
-                yi = est_pose.item(1) + r*np.sin(phi+theta)
-                est_lms[:,i] = np.array([xi,yi])
-            self.est_lms.set_xdata(est_lms[0,:])
-            self.est_lms.set_ydata(est_lms[1,:])
+#            est_lms = np.zeros(zhat.shape)
+#            for i, (r,phi) in enumerate(zhat.T):
+#                xi = est_pose.item(0) + r*np.cos(phi+theta)
+#                yi = est_pose.item(1) + r*np.sin(phi+theta)
+#                est_lms[:,i] = np.array([xi,yi])
+            est_lms = np.ones((len(mu_m)//2,2))*20
+            for i, lm in enumerate(mu_m.reshape(len(mu_m)//2, 2)):
+                if not lm[0] == 0:
+                    est_lms[i] = lm
+                    self.ellipses[i].set_center(lm)
+                    self.ellipses[i].width = 2*np.sqrt(sig_mm[2*i,2*i])
+                    self.ellipses[i].height = 2*np.sqrt(sig_mm[2*i+1,2*i+1])
+            self.est_lms.set_xdata(est_lms[:,0])
+            self.est_lms.set_ydata(est_lms[:,1])
         
         self._display()
 

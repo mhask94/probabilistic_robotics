@@ -16,12 +16,10 @@ class EKFSlam:
         self.mu_x = np.zeros((num_states, 1))
         self.mu_m = np.zeros((2*num_landmarks, 1))
 #        self.mu = np.zeros((self.n+2*self.N, 1))
-#        self.mu[:self.n] = wrap(mu0, dim=2)
         self.sig_xx = np.zeros((num_states, num_states))
         self.sig_xm = np.zeros((num_states, 2*num_landmarks))
-        self.sig_mm = np.eye(2*num_landmarks) * 1.0e6
-#        self.sigma = np.eye(self.n+2*self.N) * 1.0e6
-#        self.sigma[:self.n,:self.n] = sigma0
+        self.sig_mm = np.eye(2*num_landmarks) * 100.
+#        self.sigma = np.eye(self.n+2*self.N) * 100.
 
     def predictionStep(self, u):
         self.mu_x = self.g(u, self.mu_x, self.dt)
@@ -38,7 +36,7 @@ class EKFSlam:
                 continue
             idx = np.array([2*i, 2*i+1])
             mx, my = self.mu_m[idx]
-            if mx == my == 0:# and not np.isnan(z[0,i]):
+            if mx == my == 0:
                 r,phi = z[:,i]
                 mx = r*np.cos(phi+self.mu_x[2]) 
                 my = r*np.sin(phi+self.mu_x[2])
@@ -72,5 +70,5 @@ class EKFSlam:
             self.sig_xm = sigma[:self.n,self.n:]
             self.sig_mm = sigma[self.n:,self.n:]
 
-        return self.mu_x, self.sig_xx, zhat
+        return self.mu_x, self.sig_xx, self.mu_m, self.sig_mm
 
