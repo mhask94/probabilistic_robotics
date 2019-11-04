@@ -3,8 +3,6 @@
 import numpy as np
 from utils import wrap, MotionModel, MeasurementModel
 
-from IPython.core.debugger import set_trace
-
 class EKFSlam:
     def __init__(self, alphas, sensor_cov, num_states, num_landmarks, ts=0.1):
         self.g = MotionModel(alphas, noise=False)
@@ -15,11 +13,9 @@ class EKFSlam:
         self.N = num_landmarks 
         self.mu_x = np.zeros((num_states, 1))
         self.mu_m = np.zeros((2*num_landmarks, 1))
-#        self.mu = np.zeros((self.n+2*self.N, 1))
         self.sig_xx = np.zeros((num_states, num_states))
         self.sig_xm = np.zeros((num_states, 2*num_landmarks))
         self.sig_mm = np.eye(2*num_landmarks) * 100.
-#        self.sigma = np.eye(self.n+2*self.N) * 100.
 
     def predictionStep(self, u):
         self.mu_x = self.g(u, self.mu_x, self.dt)
@@ -38,8 +34,8 @@ class EKFSlam:
             mx, my = self.mu_m[idx]
             if mx == my == 0:
                 r,phi = z[:,i]
-                mx = r*np.cos(phi+self.mu_x[2]) 
-                my = r*np.sin(phi+self.mu_x[2])
+                mx = self.mu_x[0] + r*np.cos(phi+self.mu_x[2]) 
+                my = self.mu_x[1] + r*np.sin(phi+self.mu_x[2])
                 self.mu_m[idx] = mx, my
             zhat[:,i:i+1] = self.h(self.mu_x, mx, my) 
             H1 = self.h.jacobian()

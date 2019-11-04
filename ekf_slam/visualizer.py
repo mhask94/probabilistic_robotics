@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.patches import Circle, Ellipse
 
 def wrap(angle):
@@ -52,7 +53,7 @@ class Visualizer:
                     markersize=3, label='truth')
             self.est_dots, = self.ax.plot(self.xhat_hist,self.yhat_hist, 'r.',
                     markersize=3, label='estimates')
-            self.est_lms, = self.ax.plot(20,20, 'gx', label='est landmark')
+            self.est_lms, = self.ax.plot(20,20, 'g+', label='est landmark')
             self.ellipses = []
             for lm in landmarks:
                 ell = Ellipse([20,20], 1, 1, ec='g', fill=False)
@@ -92,11 +93,6 @@ class Visualizer:
             self.est_dots.set_xdata(self.xhat_hist)
             self.est_dots.set_ydata(self.yhat_hist)
 
-#            est_lms = np.zeros(zhat.shape)
-#            for i, (r,phi) in enumerate(zhat.T):
-#                xi = est_pose.item(0) + r*np.cos(phi+theta)
-#                yi = est_pose.item(1) + r*np.sin(phi+theta)
-#                est_lms[:,i] = np.array([xi,yi])
             est_lms = np.ones((len(mu_m)//2,2))*20
             for i, lm in enumerate(mu_m.reshape(len(mu_m)//2, 2)):
                 if not lm[0] == 0:
@@ -109,7 +105,7 @@ class Visualizer:
         
         self._display()
 
-    def plotHistory(self):
+    def plotHistory(self, sigma):
         if not self.live:
             plt.rcParams["figure.figsize"] = (9,7)
             self.fig, self.ax = plt.subplots()
@@ -169,6 +165,16 @@ class Visualizer:
         axes3[2].set_ylabel('Theta Error (rad)')
         axes3[2].set_xlabel('Time (s)')
         axes3[2].legend()
+
+        fig4 = plt.figure()
+        ax4 = fig4.add_subplot(111, projection='3d')
+        xx,yy = np.meshgrid(np.arange(len(sigma)), np.arange(len(sigma)))
+        mask = sigma > 1
+        sigma[mask] = np.max(sigma[~mask])*2
+        sigma = sigma.ravel()
+        bottom = np.zeros_like(sigma)
+        ax4.bar3d(xx.ravel(), yy.ravel(), bottom, 1, 1, sigma, shade=True)
+        ax4.set_title('Covariance Values')
 
         plt.show()
 

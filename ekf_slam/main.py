@@ -9,8 +9,6 @@ from turtlebot import TurtleBot
 from ekf_slam import EKFSlam
 from utils import wrap
 
-from IPython.core.debugger import set_trace
-
 __usage__ = '\nUsage:\tpython3 main.py <filename>.mat'
 
 def __error__(msg):
@@ -63,7 +61,7 @@ if __name__ == "__main__":
         __error__('Invalid number of arguments.' + __usage__)
 
     # inputs
-    v_c = 2.5 + 0.1*np.cos(2*np.pi*0.2*time)
+    v_c = 2.0 + 0.1*np.cos(2*np.pi*0.2*time)
     w_c = -0.60 + 0.1*np.cos(2*np.pi*0.6*time)
 
     ## system
@@ -94,8 +92,6 @@ if __name__ == "__main__":
         # sensor measurement
         z = turtlebot.getSensorMeasurement()
 
-#        set_trace()
-
         # Filter 
         xhat_bar = ekf.predictionStep(u_c)
         xhat, covariance, mu_m, sig_mm = ekf.correctionStep(z)
@@ -103,4 +99,5 @@ if __name__ == "__main__":
         # store plotting variables
         viz.update(t, x1, xhat, covariance, mu_m, sig_mm)
     
-    viz.plotHistory()
+    sigma = np.block([[ekf.sig_xx, ekf.sig_xm],[ekf.sig_xm.T, ekf.sig_mm]])
+    viz.plotHistory(sigma)
