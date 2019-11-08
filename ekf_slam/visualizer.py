@@ -98,8 +98,16 @@ class Visualizer:
                 if not lm[0] == 0:
                     est_lms[i] = lm
                     self.ellipses[i].set_center(lm)
-                    self.ellipses[i].width = 2*np.sqrt(sig_mm[2*i,2*i])
-                    self.ellipses[i].height = 2*np.sqrt(sig_mm[2*i+1,2*i+1])
+                    sig_lm = sig_mm[2*i:2*i+2, 2*i:2*i+2]
+                    val, vec = np.linalg.eig(sig_lm)
+                    idx = np.argmax(val**2)
+                    ang = np.arctan2(vec[1,idx], vec[0,idx]) * 180/np.pi
+                    width = 4 * np.sqrt(sig_lm[idx,idx])
+                    idx = 0 + (not idx)
+                    height = 4 * np.sqrt(sig_lm[idx, idx])
+                    self.ellipses[i].width = width
+                    self.ellipses[i].height = height
+                    self.ellipses[i].angle = ang
             self.est_lms.set_xdata(est_lms[:,0])
             self.est_lms.set_ydata(est_lms[:,1])
         
