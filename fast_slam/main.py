@@ -38,6 +38,7 @@ if __name__ == "__main__":
     Q = np.diag([0.1, 0.05])**2
     sigma = np.diag([1,1,0.1]) # confidence in inital condition
     xhat0 = np.array([[0.],[0.],[0.]]) # changing this causes error initially
+    num_particles = 100
     fov = 360.
 
     args = sys.argv[1:]

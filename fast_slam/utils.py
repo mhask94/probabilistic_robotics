@@ -53,19 +53,6 @@ class MotionModel():
             theta = x_m1[2][y0]
             x[0][y0] = x_m1[0][y0] + vhat[y0]*dt*np.cos(theta)
             x[1][y0] = x_m1[1][y0] + vhat[y0]*dt*np.sin(theta)
-
-        if len(cos_term) == 1:
-            self.G[0,2] = -temp*cos_term
-            self.G[1,2] = -temp*sin_term
-
-            w = u.item(1)
-            M = np.diag([v_var.item(), w_var.item()])
-            V = np.block([
-                [sin_term/w, temp*(-sin_term/w + np.cos(theta+w_dt)*dt)],
-                [cos_term/w, temp*(-cos_term/w + np.sin(theta+w_dt)*dt)],
-                [0, dt]])
-            self.R = V @ M @ V.T
-
         return x
 
     def jacobians(self):
@@ -73,20 +60,25 @@ class MotionModel():
 
 
 class MeasurementModel():
-    def __init__(self):
-        self.H = np.zeros((2,3))
-        self.H[1,2] = -1
+    def __init__(self, num_particles=100, calc_jacobians=False):
+        self.N = num_particles
+        self.calc_jacobians = calc_jacobians
+        if calc_jacobians:
+            self.H = np.zeros((self.N,2,2))
 
     def __call__(self, states, mx, my):
         x_diff, y_diff = mx - states[0], my - states[1]
         r = np.sqrt(x_diff**2 + y_diff**2)
         phi = np.arctan2(y_diff, x_diff) - states[2]
 
-        if len(x_diff) == 1:
-            self.H[0,0], self.H[0,1] = -x_diff/r, -y_diff/r
-            self.H[1,0], self.H[1,1] = y_diff/r**2, -x_diff/r**2
+        if self.calc_jacobians:
+            self.H[:,0,0], self.H[:,0,1] = x_diff/r, y_diff/r
+            self.H[:,1,0], self.H[:,1,1] = -y_diff/r**2, x_diff/r**2
 
         return np.block([[r], [wrap(phi)]])
 
     def jacobian(self):
-        return self.H
+        if self.calc_jacobians:
+            return self.H
+        else:
+            return None
