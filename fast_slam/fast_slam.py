@@ -1,12 +1,14 @@
 # EKF slam algorithm from Probablistic Robotics Table 10.2
 
 import numpy as np
+from numpy.random import randn
 from utils import wrap, MotionModel, MeasurementModel
 
 from IPython.core.debugger import set_trace
 
 class FastSLAM:
-    def __init__(self, alphas, sensor_cov, num_particles, num_landmarks, ts=0.1):
+    def __init__(self, alphas, sensor_cov, num_particles, num_landmarks, \
+            ts=0.1, avg_type='mean'):
         self.g = MotionModel(alphas, noise=True)
         self.h = MeasurementModel(num_particles, calc_jacobians=True)
         self.Q = sensor_cov
@@ -17,17 +19,26 @@ class FastSLAM:
         self.chi[-1] = 1 / num_particles
         self.mu_m = np.zeros((num_landmarks,num_particles,2,1))
         self.sig_m = np.empty((num_landmarks,num_particles,2,2))
+        self.type = avg_type
         self._update_belief()
 
     def _update_belief(self):
-        self.mu = wrap(np.mean(self.chi[:3], axis=1, keepdims=True), dim=2)
+        if self.type == 'mean':
+            self.mu = wrap(np.mean(self.chi[:3], axis=1, keepdims=True), dim=2)
+            self.mu_lm = np.mean(self.mu_m, axis=1)
+            self.sig_lm = np.mean(self.sig_m, axis=1)
+        elif self.type == 'best':
+            idx = np.argmax(self.chi[-1])
+            self.mu = self.chi[:3, idx:idx+1]
+            self.mu_lm = self.mu_m[:,idx]
+            self.sig_lm = self.sig_m[:,idx]
         self.sigma = np.cov(self.chi[:3])
 
     def _low_var_resample(self):
-        M_inv = 1/self.M
-        r = np.random.uniform(low=0, high=M_inv)
+        N_inv = 1/self.N
+        r = np.random.uniform(low=0, high=N_inv)
         c = np.cumsum(self.chi[-1])
-        U = np.arange(self.M)*M_inv + r
+        U = np.arange(self.N)*N_inv + r
         diff = c - U[:,None]
         i = np.argmax(diff > 0, axis=1)
 
@@ -35,13 +46,15 @@ class FastSLAM:
 
         P = np.cov(self.chi[:n])
         self.chi = self.chi[:,i]
+        self.mu_m = self.mu_m[:,i]
+        self.sig_m = self.sig_m[:,i]
 
         uniq = np.unique(i).size
-        if uniq*M_inv < 0.1:
-            Q = P / ((self.M*uniq)**(1/n))
+        if uniq*N_inv < 0.1:
+            Q = P / ((self.N*uniq)**(1/n))
             noise = Q @ randn(*self.chi[:n].shape)
             self.chi[:n] = wrap(self.chi[:n] + noise, dim=2)
-        self.chi[-1] = M_inv
+#        self.chi[-1] = N_inv
 
     def predictionStep(self, u):
         self.chi[:3] = self.g(u, self.chi[:3], self.dt)
@@ -84,12 +97,13 @@ class FastSLAM:
             self.chi[-1] *= z_prob
             # normalize so weights sum to 1
             z_prob /= np.sum(z_prob)
-            zhat[:,i:i+1] = np.sum(z_prob * Zi, axis=1)
-            set_trace()
+            zhat[:,i] = np.sum(z_prob * Zi, axis=1)
+#            set_trace()
+
         self.chi[-1] /= np.sum(self.chi[-1])
 
         self._low_var_resample()
         self._update_belief()
 
-        return self.mu, self.sigma, self.mu_m, self.sig_m
+        return self.mu, self.sigma, self.chi, self.mu_lm, self.sig_lm, zhat
 

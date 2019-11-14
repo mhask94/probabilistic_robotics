@@ -95,10 +95,10 @@ if __name__ == "__main__":
 
         # Filter 
         xhat_bar = fast_slam.predictionStep(u_c)
-        xhat, covariance, mu_m, sig_m = fast_slam.correctionStep(z)
+        xhat, sig, chi, mu_lm, sig_lm, zhat = fast_slam.correctionStep(z)
     
         # store plotting variables
-#        viz.update(t, x1, xhat, covariance, mu_m, sig_m)
+        viz.update(t, x1, chi, xhat, sig, mu_lm, sig_lm)
     
 #    sigma = np.block([[ekf.sig_xx, ekf.sig_xm],[ekf.sig_xm.T, ekf.sig_mm]])
 #    viz.plotHistory(sigma)

@@ -63,7 +63,7 @@ class Visualizer:
         self.ax.legend()
         self._display()
 
-    def update(self, t, true_pose, est_pose, covariance, mu_m, sig_mm):
+    def update(self, t, true_pose, particles, est_pose, sigma, mu_lm, sig_lm):
         self.time_hist.append(t)
         x,y,theta = true_pose.reshape(len(true_pose))
 
@@ -79,9 +79,9 @@ class Visualizer:
         self.yerr_hist.append(y - est_pose.item(1))
         self.thetaerr_hist.append(wrap(theta - est_pose.item(2)))
 
-        self.x2sig_hist.append(2*np.sqrt(covariance[0,0].item()))
-        self.y2sig_hist.append(2*np.sqrt(covariance[1,1].item()))
-        self.theta2sig_hist.append(2*np.sqrt(covariance[2,2].item()))
+        self.x2sig_hist.append(2*np.sqrt(sigma[0,0].item()))
+        self.y2sig_hist.append(2*np.sqrt(sigma[1,1].item()))
+        self.theta2sig_hist.append(2*np.sqrt(sigma[2,2].item()))
 
         if self.live:
             self.circ.set_center((x,y))
@@ -93,23 +93,23 @@ class Visualizer:
             self.est_dots.set_xdata(self.xhat_hist)
             self.est_dots.set_ydata(self.yhat_hist)
 
-            est_lms = np.ones((len(mu_m)//2,2))*20
-            for i, lm in enumerate(mu_m.reshape(len(mu_m)//2, 2)):
-                if not lm[0] == 0:
-                    est_lms[i] = lm
-                    self.ellipses[i].set_center(lm)
-                    sig_lm = sig_mm[2*i:2*i+2, 2*i:2*i+2]
-                    val, vec = np.linalg.eig(sig_lm)
-                    idx = np.argmax(val**2)
-                    ang = np.arctan2(vec[1,idx], vec[0,idx]) * 180/np.pi
-                    width = 4 * np.sqrt(sig_lm[idx,idx])
-                    idx = 0 + (not idx)
-                    height = 4 * np.sqrt(sig_lm[idx, idx])
-                    self.ellipses[i].width = width
-                    self.ellipses[i].height = height
-                    self.ellipses[i].angle = ang
-            self.est_lms.set_xdata(est_lms[:,0])
-            self.est_lms.set_ydata(est_lms[:,1])
+#            est_lms = np.ones((len(mu_m)//2,2))*20
+#            for i, lm in enumerate(mu_m.reshape(len(mu_m)//2, 2)):
+#                if not lm[0] == 0:
+#                    est_lms[i] = lm
+#                    self.ellipses[i].set_center(lm)
+#                    sig_lm = sig_mm[2*i:2*i+2, 2*i:2*i+2]
+#                    val, vec = np.linalg.eig(sig_lm)
+#                    idx = np.argmax(val**2)
+#                    ang = np.arctan2(vec[1,idx], vec[0,idx]) * 180/np.pi
+#                    width = 4 * np.sqrt(sig_lm[idx,idx])
+#                    idx = 0 + (not idx)
+#                    height = 4 * np.sqrt(sig_lm[idx, idx])
+#                    self.ellipses[i].width = width
+#                    self.ellipses[i].height = height
+#                    self.ellipses[i].angle = ang
+#            self.est_lms.set_xdata(est_lms[:,0])
+#            self.est_lms.set_ydata(est_lms[:,1])
         
         self._display()
 
