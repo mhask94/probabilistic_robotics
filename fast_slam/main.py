@@ -6,7 +6,7 @@ from numpy.random import randn as randn
 from visualizer import Visualizer
 from scipy.io import loadmat
 from turtlebot import TurtleBot
-from ekf_slam import EKFSlam
+from fast_slam import FastSLAM
 from utils import wrap
 
 __usage__ = '\nUsage:\tpython3 main.py <filename>.mat'
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     turtlebot = TurtleBot(alpha, Q, x0=x0, ts=ts, landmarks=landmarks, fov=fov)
     
     ## extended kalman filter
-    slam = fastSLAM(alpha, Q, len(x0), len(landmarks), ts=ts)
+    fast_slam = FastSLAM(alpha, Q, num_particles, len(landmarks), ts=ts)
     
     # plotting
     lims=[-10,10,-10,10]
@@ -94,11 +94,11 @@ if __name__ == "__main__":
         z = turtlebot.getSensorMeasurement()
 
         # Filter 
-        xhat_bar = ekf.predictionStep(u_c)
-        xhat, covariance, mu_m, sig_mm = ekf.correctionStep(z)
+        xhat_bar = fast_slam.predictionStep(u_c)
+        xhat, covariance, mu_m, sig_m = fast_slam.correctionStep(z)
     
         # store plotting variables
-        viz.update(t, x1, xhat, covariance, mu_m, sig_mm)
+#        viz.update(t, x1, xhat, covariance, mu_m, sig_m)
     
-    sigma = np.block([[ekf.sig_xx, ekf.sig_xm],[ekf.sig_xm.T, ekf.sig_mm]])
-    viz.plotHistory(sigma)
+#    sigma = np.block([[ekf.sig_xx, ekf.sig_xm],[ekf.sig_xm.T, ekf.sig_mm]])
+#    viz.plotHistory(sigma)
