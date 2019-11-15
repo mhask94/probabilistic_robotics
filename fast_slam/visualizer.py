@@ -3,12 +3,14 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.patches import Circle, Ellipse
 
+from IPython.core.debugger import set_trace
+
 def wrap(angle):
     angle -= 2*np.pi * np.floor((angle + np.pi) / (2*np.pi))
     return angle
 
 class Visualizer:
-    def __init__(self, limits=[-10,10,-10,10], x0=np.zeros((3,1)),
+    def __init__(self, limits=[-10,10,-10,10], x0=np.zeros((3,1)), particles=[],
             xhat0=np.zeros((3,1)), sigma0=np.eye(3), landmarks=np.empty(0),
             live='True'):
         self.time_hist = [0]
@@ -35,7 +37,7 @@ class Visualizer:
             plt.rcParams["figure.figsize"] = (9,7)
             self.fig, self.ax = plt.subplots()
             self.ax.axis(limits)
-            self.ax.set_title('Turtlebot EKF Slam')
+            self.ax.set_title('Turtlebot Fast Slam')
             self.ax.set_xlabel('X (m)')
             self.ax.set_ylabel('Y (m)')
             self.R = 0.75
@@ -54,6 +56,8 @@ class Visualizer:
             self.est_dots, = self.ax.plot(self.xhat_hist,self.yhat_hist, 'r.',
                     markersize=3, label='estimates')
             self.est_lms, = self.ax.plot(20,20, 'g+', label='est landmark')
+            self.particle_dots, = self.ax.plot(particles[0], particles[1], 'g.',
+                    markersize=2, label='particles')
             self.ellipses = []
             for lm in landmarks:
                 ell = Ellipse([20,20], 1, 1, ec='g', fill=False)
@@ -63,7 +67,7 @@ class Visualizer:
         self.ax.legend()
         self._display()
 
-    def update(self, t, true_pose, particles, est_pose, sigma, mu_lm, sig_lm):
+    def update(self, t, true_pose, particles, est_pose, sigma, mu_m, sig_m):
         self.time_hist.append(t)
         x,y,theta = true_pose.reshape(len(true_pose))
 
@@ -93,32 +97,32 @@ class Visualizer:
             self.est_dots.set_xdata(self.xhat_hist)
             self.est_dots.set_ydata(self.yhat_hist)
 
-#            est_lms = np.ones((len(mu_m)//2,2))*20
-#            for i, lm in enumerate(mu_m.reshape(len(mu_m)//2, 2)):
-#                if not lm[0] == 0:
-#                    est_lms[i] = lm
-#                    self.ellipses[i].set_center(lm)
-#                    sig_lm = sig_mm[2*i:2*i+2, 2*i:2*i+2]
-#                    val, vec = np.linalg.eig(sig_lm)
-#                    idx = np.argmax(val**2)
-#                    ang = np.arctan2(vec[1,idx], vec[0,idx]) * 180/np.pi
-#                    width = 4 * np.sqrt(sig_lm[idx,idx])
-#                    idx = 0 + (not idx)
-#                    height = 4 * np.sqrt(sig_lm[idx, idx])
-#                    self.ellipses[i].width = width
-#                    self.ellipses[i].height = height
-#                    self.ellipses[i].angle = ang
-#            self.est_lms.set_xdata(est_lms[:,0])
-#            self.est_lms.set_ydata(est_lms[:,1])
+            est_lms = np.ones((len(mu_m),2))*20
+            for i, lm in enumerate(mu_m[:,:,0]):
+                if not lm[0] == 0:
+                    est_lms[i] = lm
+                    self.ellipses[i].set_center(lm)
+                    sig_lm = sig_m[i]
+                    val, vec = np.linalg.eig(sig_lm)
+                    idx = np.argmax(val**2)
+                    ang = np.arctan2(vec[1,idx], vec[0,idx]) * 180/np.pi
+                    width = 4 * np.sqrt(sig_lm[idx,idx])
+                    idx = 0 + (not idx)
+                    height = 4 * np.sqrt(sig_lm[idx, idx])
+                    self.ellipses[i].width = width
+                    self.ellipses[i].height = height
+                    self.ellipses[i].angle = ang
+            self.est_lms.set_xdata(est_lms[:,0])
+            self.est_lms.set_ydata(est_lms[:,1])
         
         self._display()
 
-    def plotHistory(self, sigma):
+    def plotHistory(self):
         if not self.live:
             plt.rcParams["figure.figsize"] = (9,7)
             self.fig, self.ax = plt.subplots()
             self.ax.axis(limits)
-            self.ax.set_title('Quadcopter Simulation (Top-Down View)')
+            self.ax.set_title('Turtlebot Fast Slam')
             self.ax.set_xlabel('X (m)')
             self.ax.set_ylabel('Y (m)')
 
@@ -173,16 +177,6 @@ class Visualizer:
         axes3[2].set_ylabel('Theta Error (rad)')
         axes3[2].set_xlabel('Time (s)')
         axes3[2].legend()
-
-        fig4 = plt.figure()
-        ax4 = fig4.add_subplot(111, projection='3d')
-        xx,yy = np.meshgrid(np.arange(len(sigma)), np.arange(len(sigma)))
-        mask = sigma > 1
-        sigma[mask] = np.max(sigma[~mask])*2
-        sigma = sigma.ravel()
-        bottom = np.zeros_like(sigma)
-        ax4.bar3d(xx.ravel(), yy.ravel(), bottom, 1, 1, sigma, shade=True)
-        ax4.set_title('Covariance Values')
 
         plt.show()
 

@@ -39,7 +39,9 @@ if __name__ == "__main__":
     sigma = np.diag([1,1,0.1]) # confidence in inital condition
     xhat0 = np.array([[0.],[0.],[0.]]) # changing this causes error initially
     num_particles = 100
-    fov = 360.
+    fov = 45.
+    avg_type = 'mean'
+#    avg_type = 'best'
 
     args = sys.argv[1:]
     if sys.version_info[0] < 3:
@@ -69,12 +71,12 @@ if __name__ == "__main__":
     turtlebot = TurtleBot(alpha, Q, x0=x0, ts=ts, landmarks=landmarks, fov=fov)
     
     ## extended kalman filter
-    fast_slam = FastSLAM(alpha, Q, num_particles, len(landmarks), ts=ts)
+    fast_slam = FastSLAM(alpha, Q, num_particles, len(landmarks), ts, avg_type)
     
     # plotting
     lims=[-10,10,-10,10]
-    viz = Visualizer(limits=lims, x0=x0, xhat0=xhat0, sigma0=sigma,
-                     landmarks=landmarks, live='True')
+    viz = Visualizer(limits=lims, x0=x0, particles=fast_slam.chi, xhat0=xhat0, 
+            sigma0=sigma, landmarks=landmarks, live='True')
     
     # run simulation
     for i,t in enumerate(time):
@@ -100,5 +102,4 @@ if __name__ == "__main__":
         # store plotting variables
         viz.update(t, x1, chi, xhat, sig, mu_lm, sig_lm)
     
-#    sigma = np.block([[ekf.sig_xx, ekf.sig_xm],[ekf.sig_xm.T, ekf.sig_mm]])
-#    viz.plotHistory(sigma)
+    viz.plotHistory()
