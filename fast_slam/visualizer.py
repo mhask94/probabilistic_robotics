@@ -96,6 +96,8 @@ class Visualizer:
             self.true_dots.set_ydata(self.y_hist)
             self.est_dots.set_xdata(self.xhat_hist)
             self.est_dots.set_ydata(self.yhat_hist)
+            self.particle_dots.set_xdata(particles[0])
+            self.particle_dots.set_ydata(particles[1])
 
             est_lms = np.ones((len(mu_m),2))*20
             for i, lm in enumerate(mu_m[:,:,0]):
