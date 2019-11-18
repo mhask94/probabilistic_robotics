@@ -17,21 +17,21 @@ class FastSLAM:
         self.NL = num_landmarks 
         self.chi = np.zeros((4,num_particles))
         self.chi[-1] = 1 / num_particles
-        self.mu_m = np.zeros((num_particles,num_landmarks,2,1))
-        self.sig_m = np.empty((num_particles,num_landmarks,2,2))
+        self.mu_m = np.zeros((num_landmarks,num_particles,2,1))
+        self.sig_m = np.empty((num_landmarks,num_particles,2,2))
         self.type = avg_type
         self._update_belief()
 
     def _update_belief(self):
         if self.type == 'mean':
             self.mu = wrap(np.mean(self.chi[:3], axis=1, keepdims=True), dim=2)
-            self.mu_lm = np.mean(self.mu_m, axis=0)
-            self.sig_lm = np.mean(self.sig_m, axis=0)
+            self.mu_lm = np.mean(self.mu_m, axis=1)
+            self.sig_lm = np.mean(self.sig_m, axis=1)
         elif self.type == 'best':
             idx = np.argmax(self.chi[-1])
             self.mu = self.chi[:3, idx:idx+1]
-            self.mu_lm = self.mu_m[idx]
-            self.sig_lm = self.sig_m[idx]
+            self.mu_lm = self.mu_m[:,idx]
+            self.sig_lm = self.sig_m[:,idx]
         self.sigma = np.cov(self.chi[:3])
 
     def _low_var_resample(self):
@@ -46,8 +46,8 @@ class FastSLAM:
 
         P = np.cov(self.chi[:n])
         self.chi = self.chi[:,i]
-        self.mu_m = self.mu_m[i]
-        self.sig_m = self.sig_m[i]
+        self.mu_m = self.mu_m[:,i]
+        self.sig_m = self.sig_m[:,i]
 
         uniq = np.unique(i).size
         if uniq*N_inv < 0.1:
@@ -70,28 +70,28 @@ class FastSLAM:
                 zhat[:,i] = np.nan
                 continue
             # if landmark has never been seen before, initialize it
-            mx = self.mu_m[:,i,0].flatten()
-            my = self.mu_m[:,i,1].flatten()
-            if self.mu_m[:,i].item(0) == 0:
+            mx = self.mu_m[i,:,0].flatten()
+            my = self.mu_m[i,:,1].flatten()
+            if self.mu_m[i].item(0) == 0:
                 r,phi = z[:,i]
                 mx = self.chi[0] + r*np.cos(phi+self.chi[2])
                 my = self.chi[1] + r*np.sin(phi+self.chi[2])
-                self.mu_m[:,i,0] = mx[:,None]
-                self.mu_m[:,i,1] = my[:,None]
+                self.mu_m[i,:,0] = mx[:,None]
+                self.mu_m[i,:,1] = my[:,None]
                 Zi = self.h(self.chi[:3], mx, my)
                 H_inv = np.linalg.inv(self.h.jacobian())
-                self.sig_m[:,i] = H_inv @ self.Q @ H_inv.transpose((0,2,1))
+                self.sig_m[i] = H_inv @ self.Q @ H_inv.transpose((0,2,1))
                 continue
             Zi = self.h(self.chi[:3], mx, my) 
             H = self.h.jacobian()
-            sig_H_T = self.sig_m[:,i] @ H.transpose((0,2,1))
+            sig_H_T = self.sig_m[i] @ H.transpose((0,2,1))
             Si = H @ sig_H_T + self.Q
             Si_inv = np.linalg.inv(Si)
 
             Ki = sig_H_T @ Si_inv
             innov = wrap(z[:,i:i+1] - Zi, dim=1)
-            self.mu_m[:,i] += Ki @ innov.T[:,:,None]
-            self.sig_m[:,i] = (np.eye(2) - Ki @ H) @ self.sig_m[:,i]
+            self.mu_m[i] += Ki @ innov.T[:,:,None]
+            self.sig_m[i] = (np.eye(2) - Ki @ H) @ self.sig_m[i]
             exp = np.exp(-0.5 * innov.T[:,None,:] @ Si_inv @ innov.T[:,:,None])
             z_prob = np.linalg.det(2*np.pi*Si)**(-0.5) * exp.flatten()
             self.chi[-1] *= z_prob
