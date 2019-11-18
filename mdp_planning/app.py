@@ -2,7 +2,7 @@ import time
 from pyqtgraph.Qt import QtCore, QtGui
 from PyQt5.QtCore import Qt
 import pyqtgraph as pg
-from occupancy_grid_map import OccupancyGridMap
+from mdp_planner import MPDPlanner
 import numpy as np
 
 class TurtleBotItem(pg.GraphicsObject):
@@ -38,9 +38,9 @@ class TurtleBotItem(pg.GraphicsObject):
         return QtCore.QRectF(self.picture.boundingRect())
 
 class App(QtGui.QMainWindow):
-    def __init__(self, world, parent=None):
+    def __init__(self, walls, obs, goal, parent=None):
         super(App, self).__init__(parent)
-        self.map = world
+        self.mdp = MPDPlanner(walls, obs, goal)
         self.idx = 0
         self.running = True
         grid_size = 1

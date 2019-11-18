@@ -23,8 +23,11 @@ if __name__ == '__main__':
         __error__('Invalid number of arguments, expected 1.\n' + __usage__)
 
     world = data['map']
+    goal = data['goal']
+    walls = data['walls']
+    obs = data['obs']
 
     app = QtGui.QApplication(['Occupancy Grid Mapping'])
-    thisapp = App(world)
+    thisapp = App(walls, obs, goal)
     thisapp.show()
     sys.exit(app.exec_())
