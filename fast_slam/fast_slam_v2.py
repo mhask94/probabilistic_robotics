@@ -1,10 +1,8 @@
-# EKF slam algorithm from Probablistic Robotics Table 10.2
+# This is a fast SLAM algorith that uses a particle filter for each landmark
 
 import numpy as np
 from numpy.random import randn
 from utils import wrap, MotionModel, MeasurementModel
-
-from IPython.core.debugger import set_trace
 
 class FastSLAM:
     def __init__(self, alphas, sensor_cov, num_particles, num_landmarks, \
@@ -98,7 +96,6 @@ class FastSLAM:
             # normalize so weights sum to 1
             z_prob /= np.sum(z_prob)
             zhat[:,i] = np.sum(z_prob * Zi, axis=1)
-#            set_trace()
 
         self.chi[-1] /= np.sum(self.chi[-1])
 
