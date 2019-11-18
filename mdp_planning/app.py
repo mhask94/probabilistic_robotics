@@ -2,49 +2,16 @@ import time
 from pyqtgraph.Qt import QtCore, QtGui
 from PyQt5.QtCore import Qt
 import pyqtgraph as pg
-from mdp_planner import MPDPlanner
+from mdp_planner import MDPPlanner
 import numpy as np
-
-class TurtleBotItem(pg.GraphicsObject):
-    def __init__(self, pose, radius):
-        pg.GraphicsObject.__init__(self)
-        self.pose = QtCore.QPointF(*pose[:2])
-        self.R = radius 
-        pt = pose[:2] + np.array([np.cos(pose[2]), np.sin(pose[2])]) * self.R
-        self.pt = QtCore.QPointF(*(pose[:2] + pt))
-        self.generatePicture()
-
-    def setPose(self, pose):
-        self.pose.setX(pose[0])
-        self.pose.setY(pose[1])
-        pt = pose[:2] + np.array([np.cos(pose[2]), np.sin(pose[2])]) * self.R
-        self.pt.setX(pt[0])
-        self.pt.setY(pt[1])
-        self.generatePicture()
-
-    def generatePicture(self):
-        self.picture = QtGui.QPicture()
-        p = QtGui.QPainter(self.picture)
-        p.setPen(QtGui.QPen(Qt.black, 0.5, Qt.SolidLine))
-        p.setBrush(QtGui.QBrush(Qt.yellow, Qt.SolidPattern))
-        p.drawEllipse(self.pose, self.R, self.R)
-        p.drawLine(self.pose, self.pt)
-        p.end()
-
-    def paint(self, p, *args):
-        p.drawPicture(0, 0, self.picture)
-
-    def boundingRect(self):
-        return QtCore.QRectF(self.picture.boundingRect())
 
 class App(QtGui.QMainWindow):
     def __init__(self, walls, obs, goal, parent=None):
         super(App, self).__init__(parent)
-        self.mdp = MPDPlanner(walls, obs, goal)
+        self.map = walls + obs + goal
+        self.mdp = MDPPlanner(walls, obs, goal)
         self.idx = 0
         self.running = True
-        grid_size = 1
-        self.map = OccupancyGridMap(100//grid_size, 100//grid_size, grid_size)
 
         #### Create Gui Elements ###########
         self.mainbox = QtGui.QWidget()
@@ -63,9 +30,7 @@ class App(QtGui.QMainWindow):
 
         #  image plot
         self.img = pg.ImageItem(border='w')
-        self.turtlebot = TurtleBotItem(self.X[:,self.idx], 1.5) 
         self.view.addItem(self.img)
-        self.view.addItem(self.turtlebot)
 
 
         #### Set Data  #####################
@@ -79,15 +44,13 @@ class App(QtGui.QMainWindow):
 
     def _update(self):
         if self.running:
-            self.map.update_map(self.X[:,self.idx], self.z[:,:,self.idx].T)
-            data = 1/(1 + np.exp(self.map.log_prob_map))
+            delta = self.mdp.update()
+            data = self.mdp.V
+#            data = 1/(1 + np.exp(self.map.log_prob_map))
             self.img.setImage(data)
 
-            self.turtlebot.setPose(self.X[:,self.idx])
-
-            self.idx += 1
-            if self.idx >= len(self.X[0]):
-                self.running = False
+#            if self.idx >= len(self.X[0]):
+#                self.running = False
 
             now = time.time()
             dt = (now-self.lastupdate)
