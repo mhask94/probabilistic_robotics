@@ -39,7 +39,7 @@ if __name__ == "__main__":
     sigma = np.diag([1,1,0.1]) # confidence in inital condition
     xhat0 = np.array([[0.],[0.],[0.]]) # changing this causes error initially
     num_particles = 250
-    fov = 360.
+    fov = 45.
     avg_type = 'mean'
 #    avg_type = 'best'
 
