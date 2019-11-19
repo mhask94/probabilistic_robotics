@@ -96,12 +96,15 @@ class App(QtGui.QMainWindow):
 #            data[self.mask] /= np.sum(data[self.mask])
             self.map[self.mask,:] = data[self.mask,None]
 
-            self.img.setImage(self.map)
+            self.img.setImage(self.map.transpose((1,0,2))[:,::-1])
 
 #            self.running = False
+#            input('Press ENTER...')
 
-            if self.mdp.count > 350 or delta < 100:
+            if self.mdp.count > 350:# or delta < .0001:
                 self.running = False
+                self.final_iter = self.mdp.count
+                self.final_del = delta
 
             now = time.time()
             dt = (now-self.lastupdate)
@@ -115,16 +118,19 @@ class App(QtGui.QMainWindow):
             QtCore.QTimer.singleShot(1, self._update)
             self.counter += 1
         else:
-            tx = 'Finished Planning'
+            tx = 'Finished Planning.\tIter: {}\tDelta: {}'
+            tx = tx.format(self.final_iter, self.final_del)
 #            arrow = ArrowItem(np.array([75,95]), 1)
 #            self.view.addItem(arrow)
 
-            policy = self.mdp.pi
-            for i in range(2, len(policy)-2):
-                for j in range(2, len(policy[0])-2):
-                    if not self.mask[i,j]:
+            policy = np.flip(self.mdp.pi.T, 1)
+            nr, nc = policy.shape
+            for i in range(2, nr-2):
+                for j in range(2, nc-2):
+                    if not np.flip(self.mask.T,1)[i,j]:
                         continue
                     arrow = ArrowItem(np.array([i,j]), policy[i,j])
                     self.view.addItem(arrow)
+            print('Value: \n', self.mdp.V[2:-2,2:-2])
 
         self.label.setText(tx)
