@@ -52,11 +52,10 @@ class App(QtGui.QMainWindow):
         self.map[:,:,1] = goal * g
         self.mask = (walls + obs + goal) == 0
         self.mask[0] = self.mask[-1] = self.mask[:,0] = self.mask[:,-1] = False
-#        self.mask[:,0] = self.mask[:,-1] = False
-#        walls + obs + goal
         self.mdp = MDPPlanner(walls, obs, goal, w, o, g)
         self.idx = 0
         self.running = True
+        self.min_delta = obs.size / 2
 
         #### Create Gui Elements ###########
         self.mainbox = QtGui.QWidget()
@@ -91,17 +90,13 @@ class App(QtGui.QMainWindow):
         if self.running:
             delta = self.mdp.update()
             data = self.mdp.V
-#            data[self.mask] /= np.max(data[self.mask])
-#            data[self.mask] = np.exp(data[self.mask])
-#            data[self.mask] /= np.sum(data[self.mask])
             self.map[self.mask,:] = data[self.mask,None]
 
             self.img.setImage(self.map.transpose((1,0,2))[:,::-1])
 
 #            self.running = False
-#            input('Press ENTER...')
 
-            if self.mdp.count > 350:# or delta < .0001:
+            if self.mdp.count > 350 or delta < self.min_delta:
                 self.running = False
                 self.final_iter = self.mdp.count
                 self.final_del = delta
@@ -131,6 +126,5 @@ class App(QtGui.QMainWindow):
                         continue
                     arrow = ArrowItem(np.array([i,j]), policy[i,j])
                     self.view.addItem(arrow)
-            print('Value: \n', self.mdp.V[2:-2,2:-2])
 
         self.label.setText(tx)
