@@ -4,55 +4,22 @@ from PyQt5.QtCore import Qt
 import pyqtgraph as pg
 from mdp_planner import MDPPlanner
 import numpy as np
+from utils import ArrowItem, LineItem
 
 from IPython.core.debugger import set_trace
 
-class ArrowItem(pg.GraphicsObject):
-    def __init__(self, origin, direction):
-        pg.GraphicsObject.__init__(self)
-        points = ArrowItem.pts(direction) + origin.reshape(2,1)
-        self.p1 = QtCore.QPointF(*points[:,0])
-        self.p2 = QtCore.QPointF(*points[:,1])
-        self.p3 = QtCore.QPointF(*points[:,2])
-        self.p4 = QtCore.QPointF(*points[:,3])
-        self.generatePicture()
-
-    def generatePicture(self):
-        self.picture = QtGui.QPicture()
-        p = QtGui.QPainter(self.picture)
-        p.setPen(QtGui.QPen(Qt.yellow, 0.1, Qt.SolidLine))
-#        p.setBrush(QtGui.QBrush(Qt.yellow, Qt.SolidPattern))
-        p.drawLine(self.p1, self.p2)
-        p.drawLine(self.p3, self.p2)
-        p.drawLine(self.p4, self.p2)
-        p.end()
-
-    def paint(self, p, *args):
-        p.drawPicture(0, 0, self.picture)
-
-    def boundingRect(self):
-        return QtCore.QRectF(self.picture.boundingRect())
-
-    @staticmethod
-    def pts(direction):
-        points = np.array([[0, -.4],[0, .4],[-.2, .3],[.2, .3]]).T
-        angle = -np.pi/2 * direction
-        C_ang, S_ang = np.cos(angle), np.sin(angle)
-        R = np.array([[C_ang, -S_ang], [S_ang, C_ang]])
-        points = R @ points + np.array([[.5,.5]]).T
-        return points
-
 class App(QtGui.QMainWindow):
-    def __init__(self, walls, obs, goal, parent=None):
+    def __init__(self, walls, obs, goal, start, parent=None):
         super(App, self).__init__(parent)
-        w, o, g = -100, -5000, 1e5
+        w, o, g, m = -100, -5000, 1e5, -2
+        self.start = start
         self.map = np.zeros((*obs.shape,3))
         self.map[:,:,2] = walls * g
         self.map[:,:,0] = obs * g
         self.map[:,:,1] = goal * g
         self.mask = (walls + obs + goal) == 0
         self.mask[0] = self.mask[-1] = self.mask[:,0] = self.mask[:,-1] = False
-        self.mdp = MDPPlanner(walls, obs, goal, w, o, g)
+        self.mdp = MDPPlanner(walls, obs, goal, w, o, g, m)
         self.idx = 0
         self.running = True
         self.min_delta = obs.size / 2
@@ -115,7 +82,7 @@ class App(QtGui.QMainWindow):
         else:
             tx = 'Finished Planning.\tIter: {}\tDelta: {}'
             tx = tx.format(self.final_iter, self.final_del)
-#            arrow = ArrowItem(np.array([75,95]), 1)
+#            arrow = ArrowItem(np.array([20,len(self.mdp.V[0])-28]), 1)
 #            self.view.addItem(arrow)
 
             policy = np.flip(self.mdp.pi.T, 1)
@@ -126,5 +93,19 @@ class App(QtGui.QMainWindow):
                         continue
                     arrow = ArrowItem(np.array([i,j]), policy[i,j])
                     self.view.addItem(arrow)
+            
+            si, sj = self.start[1], len(self.mdp.V[0])-self.start[0]
+            while np.flip(self.mask.T, 1)[si,sj]:
+                p_ij = policy[si,sj]
+                line = LineItem(np.array([si,sj]), p_ij)
+                self.view.addItem(line)
+                if p_ij == 0:
+                    sj += 1
+                elif p_ij == 1:
+                    si += 1
+                elif p_ij == 2:
+                    sj -= 1
+                elif p_ij == 3:
+                    si -= 1
 
         self.label.setText(tx)
