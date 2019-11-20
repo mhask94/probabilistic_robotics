@@ -52,13 +52,18 @@ class App(QtGui.QMainWindow):
 
     def _update(self):
         if self.running:
+#            print('V: \n', self.mdp.V[2:-2, 2:-2])
+            
             delta = self.mdp.update()
             data = self.mdp.V
             self.map[self.mask,:] = data[self.mask,None]
 
             self.img.setImage(self.map.transpose((1,0,2))[:,::-1])
 
-            if self.mdp.count > 350 or delta < self.min_delta:
+#            print('V: \n', data[2:-2, 2:-2])
+#            exit()
+
+            if self.mdp.count > 350:# or delta < self.min_delta:
                 self.running = False
                 self.final_iter = self.mdp.count
                 self.final_del = delta
@@ -75,6 +80,7 @@ class App(QtGui.QMainWindow):
             QtCore.QTimer.singleShot(1, self._update)
             self.counter += 1
         else:
+            print('Calculating optimal policy')
             tx = 'Finished Planning.\tIter: {}\tDelta: {}'
             tx = tx.format(self.final_iter, self.final_del)
 
@@ -90,6 +96,7 @@ class App(QtGui.QMainWindow):
             
             # plot optimal policy (magenta line)
             si, sj = self.start[1], len(self.mdp.V[0])-self.start[0]-1
+            i = 0
             while np.flip(self.mask.T, 1)[si,sj]:
                 p_ij = policy[si,sj]
                 line = LineItem(np.array([si,sj]), p_ij)
@@ -102,5 +109,8 @@ class App(QtGui.QMainWindow):
                     sj -= 1
                 elif p_ij == 3:
                     si -= 1
+                i += 1
+                if i > self.mask.size:
+                    break
 
         self.label.setText(tx)
