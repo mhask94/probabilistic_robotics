@@ -1,12 +1,9 @@
 import time
 from pyqtgraph.Qt import QtCore, QtGui
-from PyQt5.QtCore import Qt
 import pyqtgraph as pg
 from mdp_planner import MDPPlanner
 import numpy as np
 from utils import ArrowItem, LineItem
-
-from IPython.core.debugger import set_trace
 
 class App(QtGui.QMainWindow):
     def __init__(self, walls, obs, goal, start, parent=None):
@@ -37,7 +34,7 @@ class App(QtGui.QMainWindow):
 
         self.view = self.canvas.addViewBox()
         self.view.setAspectLocked(True)
-        self.view.setRange(QtCore.QRectF(0,0, 100, 100))
+        self.view.setRange(QtCore.QRectF(0,0,*self.mask.T.shape )) #size screen
 
         #  image plot
         self.img = pg.ImageItem(border='w')
@@ -61,8 +58,6 @@ class App(QtGui.QMainWindow):
 
             self.img.setImage(self.map.transpose((1,0,2))[:,::-1])
 
-#            self.running = False
-
             if self.mdp.count > 350 or delta < self.min_delta:
                 self.running = False
                 self.final_iter = self.mdp.count
@@ -82,9 +77,8 @@ class App(QtGui.QMainWindow):
         else:
             tx = 'Finished Planning.\tIter: {}\tDelta: {}'
             tx = tx.format(self.final_iter, self.final_del)
-#            arrow = ArrowItem(np.array([20,len(self.mdp.V[0])-28]), 1)
-#            self.view.addItem(arrow)
 
+            # plot policy function (arrows)
             policy = np.flip(self.mdp.pi.T, 1)
             nr, nc = policy.shape
             for i in range(2, nr-2):
@@ -94,7 +88,8 @@ class App(QtGui.QMainWindow):
                     arrow = ArrowItem(np.array([i,j]), policy[i,j])
                     self.view.addItem(arrow)
             
-            si, sj = self.start[1], len(self.mdp.V[0])-self.start[0]
+            # plot optimal policy (magenta line)
+            si, sj = self.start[1], len(self.mdp.V[0])-self.start[0]-1
             while np.flip(self.mask.T, 1)[si,sj]:
                 p_ij = policy[si,sj]
                 line = LineItem(np.array([si,sj]), p_ij)

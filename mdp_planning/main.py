@@ -28,7 +28,7 @@ if __name__ == '__main__':
     walls = data['walls']
     obs = data['obs']
 
-    app = QtGui.QApplication(['Occupancy Grid Mapping'])
+    app = QtGui.QApplication(['MDP Planning'])
     thisapp = App(walls, obs, goal, start)
     thisapp.show()
     sys.exit(app.exec_())
