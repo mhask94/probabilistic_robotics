@@ -21,7 +21,7 @@ class MDPPlanner():
                 if self.absolve[i,j]:
                     continue
                 else:
-#                    set_trace()
+                    set_trace()
                     dirs = np.empty(self.rewards.shape)
                     dirs[0] = self.V[1:-3, 2:-2] # north
                     dirs[1] = self.V[2:-2, 3:-1] # east
@@ -37,15 +37,15 @@ class MDPPlanner():
                     # east
                     idx = np.array([0,1,2])
                     self.rewards[1] = np.sum(weights * dirs[idx], 0) + self.wm*\
-                            ~self.absolve[1:-3, 2:-2]
+                            ~self.absolve[2:-2, 3:-1]
                     # south
                     idx = np.array([1,2,3])
                     self.rewards[2] = np.sum(weights * dirs[idx], 0) + self.wm*\
-                            ~self.absolve[1:-3, 2:-2]
+                            ~self.absolve[3:-1, 2:-2]
                     # west 
                     idx = np.array([2,3,0])
                     self.rewards[3] = np.sum(weights * dirs[idx], 0) + self.wm*\
-                            ~self.absolve[1:-3, 2:-2]
+                            ~self.absolve[2:-2, 1:-3]
 
                     v = np.max(self.rewards, axis=0)
 
