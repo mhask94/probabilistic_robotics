@@ -52,18 +52,13 @@ class App(QtGui.QMainWindow):
 
     def _update(self):
         if self.running:
-#            print('V: \n', self.mdp.V[2:-2, 2:-2])
-            
             delta = self.mdp.update()
             data = self.mdp.V
             self.map[self.mask,:] = data[self.mask,None]
 
             self.img.setImage(self.map.transpose((1,0,2))[:,::-1])
 
-#            print('V: \n', data[2:-2, 2:-2])
-#            exit()
-
-            if self.mdp.count > 350:# or delta < self.min_delta:
+            if self.mdp.count > 350 or delta < self.min_delta:
                 self.running = False
                 self.final_iter = self.mdp.count
                 self.final_del = delta
