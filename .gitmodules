@@ -1,3 +1,6 @@
 [submodule "turtlebot_lab"]
 	path = turtlebot_lab
 	url = git@github.com:mhask94/turtlebot_lab.git
+[submodule "moving_horizon_estimation"]
+	path = moving_horizon_estimation
+	url = https://github.com/b4sgren/moving_horizon_estimation.git
