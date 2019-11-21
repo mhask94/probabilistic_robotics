@@ -92,6 +92,8 @@ class App(QtGui.QMainWindow):
             # plot optimal policy (magenta line)
             si, sj = self.start[1], len(self.mdp.V[0])-self.start[0]-1
             i = 0
+            prev = (si, sj)
+            prev2 = prev[:]
             while np.flip(self.mask.T, 1)[si,sj]:
                 p_ij = policy[si,sj]
                 line = LineItem(np.array([si,sj]), p_ij)
@@ -104,6 +106,10 @@ class App(QtGui.QMainWindow):
                     sj -= 1
                 elif p_ij == 3:
                     si -= 1
+                if (si, sj) == prev2:
+                    break
+                prev2 = prev[:]
+                prev = (si, sj)
                 i += 1
                 if i > self.mask.size:
                     break
