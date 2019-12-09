@@ -22,6 +22,10 @@ class POMDP():
         uniq = np.unique(ind)
         self.value_lines = self.value_lines[uniq]
 
+        if len(uniq) > 2:
+            self.prob_turn_start = self.prob[0,np.where(ind!=ind[0])[0][0]]
+            self.prob_turn_end = self.prob[0,np.where(ind!=ind[-1])[0][-1]]
+
     def observe(self):
         num = len(self.value_lines)
         res1 = self.value_lines @ self.meas_p1
